@@ -1,7 +1,13 @@
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -662,56 +668,58 @@ for (const [fileName, content] of Object.entries(templates)) {
   fs.writeFileSync(path.join(viewsDir, fileName), content, 'utf8');
 }
 
-db.serialize(() => {
-  db.run(`
+async function initDB() {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('employee', 'finance', 'admin'))
+      role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
     )
   `);
 
-  db.run(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT UNIQUE NOT NULL,
-      price REAL NOT NULL,
+      price NUMERIC NOT NULL,
       image_url TEXT
     )
   `);
 
-  db.run(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS withdrawals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL,
       item_id INTEGER,
       item_name TEXT NOT NULL,
-      item_price REAL NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      FOREIGN KEY(user_id) REFERENCES users(id),
-      FOREIGN KEY(item_id) REFERENCES products(id)
+      item_price NUMERIC NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
     )
   `);
-
-  db.run(`ALTER TABLE products ADD COLUMN image_url TEXT`, () => {});
-  db.run(`ALTER TABLE withdrawals ADD COLUMN item_price REAL NOT NULL DEFAULT 0`, () => {});
-  db.run(`ALTER TABLE withdrawals ADD COLUMN item_id INTEGER`, () => {});
 
   const adminPasswordHash = bcrypt.hashSync('123456', 10);
   const financePasswordHash = bcrypt.hashSync('123456', 10);
 
-  db.run(
-    `INSERT OR IGNORE INTO users (id, name, username, password_hash, role) VALUES (1, 'Administrador', 'admin', ?, 'admin')`,
+  await pool.query(
+    `
+    INSERT INTO users (id, name, username, password_hash, role)
+    VALUES (1, 'Administrador', 'admin', $1, 'admin')
+    ON CONFLICT (id) DO NOTHING
+    `,
     [adminPasswordHash]
   );
 
-  db.run(
-    `INSERT OR IGNORE INTO users (id, name, username, password_hash, role) VALUES (2, 'Financeiro', 'financeiro', ?, 'finance')`,
+  await pool.query(
+    `
+    INSERT INTO users (id, name, username, password_hash, role)
+    VALUES (2, 'Financeiro', 'financeiro', $1, 'finance')
+    ON CONFLICT (id) DO NOTHING
+    `,
     [financePasswordHash]
   );
-});
+}
 
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.redirect('/');
@@ -1158,6 +1166,14 @@ app.get('/logout', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+
+initDB()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Erro ao inicializar banco:', err);
+  });
