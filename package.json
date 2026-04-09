@@ -1,23 +1,21 @@
 {
   "name": "controle-bebidas",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node app.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "dayjs": "^1.11.20",
-    "ejs": "^5.0.1",
-    "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "pdfkit": "^0.18.0",
-    "sqlite3": "^6.0.1",
+    "bcryptjs": "^2.4.3",
+    "dayjs": "^1.11.10",
+    "ejs": "^3.1.9",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "pdfkit": "^0.13.0",
+    "sqlite3": "^5.1.7",
     "xlsx": "^0.18.5"
   }
 }
