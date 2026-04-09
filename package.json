@@ -2,10 +2,10 @@
   "name": "controle-bebidas",
   "version": "1.0.0",
   "description": "Sistema de controle de bebidas com Node.js, Express, EJS e PostgreSQL",
-"main": "app.cjs",
-"scripts": {
-  "start": "node app.cjs"
-}
+  "main": "app.cjs",
+  "scripts": {
+    "start": "node app.cjs"
+  },
   "engines": {
     "node": "20.x"
   },
