@@ -979,19 +979,14 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     }
 
     res.render('dashboard', {
-      user,
-      products,
-      withdrawals: [],
-      withdrawalsAll: withdrawalsAllResult.rows,
-      summaryByUser: summaryByUserResult.rows,
-      users,
-      message,
-      dayjs
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Erro ao carregar dashboard.');
-  }
+  user,
+  products,
+  withdrawals,
+  withdrawalsAll,
+  summaryByUser,
+  users,
+  message,
+  dayjs
 });
 
 app.post('/withdraw', requireAuth, async (req, res) => {
