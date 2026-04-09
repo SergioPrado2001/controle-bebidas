@@ -595,7 +595,7 @@ const templates = {
           <div class="form-row">
             <div>
               <label>Mês</label><br /><br />
-              <input type="month" name="month" required />
+              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
             </div>
             <div style="max-width:240px;">
               <label>&nbsp;</label><br /><br />
@@ -608,7 +608,7 @@ const templates = {
           <div class="form-row">
             <div>
               <label>Mês</label><br /><br />
-              <input type="month" name="month" required />
+              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
             </div>
             <div style="max-width:240px;">
               <label>&nbsp;</label><br /><br />
