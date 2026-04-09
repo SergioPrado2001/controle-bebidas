@@ -771,6 +771,38 @@ async function initDB() {
   );
 }
 
+const adminPasswordHash = bcrypt.hashSync('123456', 10);
+const financePasswordHash = bcrypt.hashSync('123456', 10);
+
+await pool.query(
+  `
+  INSERT INTO users (name, username, password_hash, role)
+  VALUES ('Administrador', 'admin', $1, 'admin')
+  ON CONFLICT (username) DO NOTHING
+  `,
+  [adminPasswordHash]
+);
+
+await pool.query(
+  `
+  INSERT INTO users (name, username, password_hash, role)
+  VALUES ('Financeiro', 'financeiro', $1, 'finance')
+  ON CONFLICT (username) DO NOTHING
+  `,
+  [financePasswordHash]
+);
+
+/* FORÇA atualizar a senha dos dois usuários */
+await pool.query(
+  `UPDATE users SET password_hash = $1, role = 'admin', name = 'Administrador' WHERE username = 'admin'`,
+  [adminPasswordHash]
+);
+
+await pool.query(
+  `UPDATE users SET password_hash = $1, role = 'finance', name = 'Financeiro' WHERE username = 'financeiro'`,
+  [financePasswordHash]
+);
+
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.redirect('/');
   next();
