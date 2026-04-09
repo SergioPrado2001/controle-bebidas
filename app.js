@@ -592,30 +592,30 @@ const templates = {
       <div class="card">
         <h2>Relatórios</h2>
         <form method="GET" action="/reports/xlsx">
-          <div class="form-row">
-            <div>
-              <label>Mês</label><br /><br />
-              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
-            </div>
-            <div style="max-width:240px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="submit">Baixar Excel</button>
-            </div>
-          </div>
-        </form>
+  <div class="form-row">
+    <div>
+      <label>Mês</label><br /><br />
+      <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+    </div>
+    <div style="max-width:240px;">
+      <label>&nbsp;</label><br /><br />
+      <button type="submit">Baixar Excel</button>
+    </div>
+  </div>
+</form>
 
         <form method="GET" action="/reports/pdf" style="margin-top:14px;">
-          <div class="form-row">
-            <div>
-              <label>Mês</label><br /><br />
-              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
-            </div>
-            <div style="max-width:240px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="submit" class="btn-soft">Baixar PDF</button>
-            </div>
-          </div>
-        </form>
+  <div class="form-row">
+    <div>
+      <label>Mês</label><br /><br />
+      <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+    </div>
+    <div style="max-width:240px;">
+      <label>&nbsp;</label><br /><br />
+      <button type="submit" class="btn-soft">Baixar PDF</button>
+    </div>
+  </div>
+</form>
       </div>
 
       <div class="card">
