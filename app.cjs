@@ -770,6 +770,24 @@ async function initDB() {
     `,
     [financePasswordHash]
   );
+
+  await pool.query(
+    `
+    UPDATE users
+    SET password_hash = $1, role = 'admin', name = 'Administrador'
+    WHERE username = 'admin'
+    `,
+    [adminPasswordHash]
+  );
+
+  await pool.query(
+    `
+    UPDATE users
+    SET password_hash = $1, role = 'finance', name = 'Financeiro'
+    WHERE username = 'financeiro'
+    `,
+    [financePasswordHash]
+  );
 }
 
 const adminPasswordHash = bcrypt.hashSync('123456', 10);
