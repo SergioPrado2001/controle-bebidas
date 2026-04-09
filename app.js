@@ -992,7 +992,7 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
     await pool.query('COMMIT');
 
-    req.session.message = \`Retirada registrada com sucesso: \${product.name} - R$ \${Number(product.price).toFixed(2).replace('.', ',')}.\`;
+    req.session.message = \`Retirada registrada com sucesso: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
@@ -1214,7 +1214,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     XLSX.utils.book_append_sheet(workbook, detalheWs, 'Detalhado');
     XLSX.utils.book_append_sheet(workbook, resumoWs, 'Resumo');
 
-    const fileName = \`relatorio-bebidas-\${month}.xlsx\`;
+    const fileName = \`relatorio-bebidas-${month}.xlsx`;
     const filePath = path.join(baseDir, fileName);
 
     XLSX.writeFile(workbook, filePath);
