@@ -916,11 +916,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   req.session.message = null;
 
   try {
-    const productsResult = await pool.query(
-      `SELECT id, name, price, image_url, stock_quantity
-       FROM products
-       ORDER BY name ASC`
-    );
+    const productsResult = await pool.query(`
+      SELECT id, name, price, image_url, stock_quantity
+      FROM products
+      ORDER BY name ASC
+    `);
 
     const products = productsResult.rows;
 
@@ -945,6 +945,52 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         dayjs
       });
     }
+
+    const withdrawalsAllResult = await pool.query(`
+      SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
+      FROM withdrawals w
+      INNER JOIN users u ON u.id = w.user_id
+      ORDER BY w.created_at DESC
+      LIMIT 100
+    `);
+
+    const summaryByUserResult = await pool.query(`
+      SELECT
+        u.name,
+        COUNT(w.id) AS total_items,
+        COALESCE(SUM(w.item_price), 0) AS total_value
+      FROM users u
+      LEFT JOIN withdrawals w ON w.user_id = u.id
+      WHERE u.role = 'employee'
+      GROUP BY u.id, u.name
+      ORDER BY total_value DESC, total_items DESC, u.name ASC
+    `);
+
+    let users = [];
+    if (user.role === 'admin') {
+      const usersResult = await pool.query(`
+        SELECT id, name, username, role
+        FROM users
+        ORDER BY role ASC, name ASC
+      `);
+      users = usersResult.rows;
+    }
+
+    return res.render('dashboard', {
+      user,
+      products,
+      withdrawals: [],
+      withdrawalsAll: withdrawalsAllResult.rows,
+      summaryByUser: summaryByUserResult.rows,
+      users,
+      message,
+      dayjs
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Erro ao carregar dashboard.');
+  }
+});
 
     const withdrawalsAllResult = await pool.query(
       `
@@ -1037,7 +1083,7 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
     await pool.query('COMMIT');
 
-    req.session.message = \`Retirada registrada com sucesso: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
+    req.session.message = `Retirada registrada com sucesso: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
