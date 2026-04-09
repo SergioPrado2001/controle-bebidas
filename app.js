@@ -1299,7 +1299,7 @@ app.get('/logout', (req, res) => {
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(\`Servidor rodando em http://0.0.0.0:\${PORT}\`);
+      console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
     });
   })
   .catch((err) => {
