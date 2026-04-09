@@ -2,12 +2,6 @@ const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -15,26 +9,36 @@ const PDFDocument = require('pdfkit');
 const dayjs = require('dayjs');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL
+    ? { rejectUnauthorized: false }
+    : false,
+});
 
 const baseDir = __dirname;
 const viewsDir = path.join(baseDir, 'views');
 const publicDir = path.join(baseDir, 'public');
-const dbPath = path.join(baseDir, 'refrigerantes.db');
 
 if (!fs.existsSync(viewsDir)) fs.mkdirSync(viewsDir, { recursive: true });
 if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
 
-const db = new sqlite3.Database(dbPath);
-
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(express.static(publicDir));
+
 app.use(
   session({
-    secret: 'segredo-super-seguro-troque-isso',
+    secret: process.env.SESSION_SECRET || 'segredo-super-seguro-troque-isso',
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      secure: false,
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 12,
+    },
   })
 );
 
@@ -315,6 +319,9 @@ const templates = {
       background:rgba(255,255,255,.05);
       color:var(--text);
     }
+    select option {
+      color:#000;
+    }
     button {
       background:linear-gradient(135deg, var(--accent), var(--accent2));
       color:#fff;
@@ -324,6 +331,7 @@ const templates = {
     }
     .btn-soft { background:linear-gradient(135deg, #284f88, #3f6fb1); }
     .btn-danger { background:linear-gradient(135deg, #cc314f, #ff6b84); }
+    .btn-pix { background:linear-gradient(135deg, #0d9b73, #21c58b); }
     .msg {
       background:rgba(37,193,140,.15);
       color:#defff2;
@@ -398,7 +406,7 @@ const templates = {
       padding:12px 8px;
       vertical-align:top;
     }
-    a { text-decoration:none; }
+    a { text-decoration:none; color:inherit; }
   </style>
 </head>
 <body>
@@ -449,12 +457,17 @@ const templates = {
             <h3 style="margin:10px 0 0;"><%= item.name %></h3>
             <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
 
+            <% if (item.stock_quantity !== null && item.stock_quantity !== undefined) { %>
+              <div class="muted" style="margin-top:8px;">Estoque atual: <strong><%= item.stock_quantity %></strong></div>
+            <% } %>
+
             <% if (user.role === 'admin') { %>
               <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
                 <div class="form-row">
                   <div><input type="text" name="name" value="<%= item.name %>" required /></div>
                   <div><input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required /></div>
                   <div><input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" /></div>
+                  <div><input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" /></div>
                 </div>
                 <div class="actions" style="margin-top:10px;">
                   <button type="submit">Salvar</button>
@@ -479,13 +492,22 @@ const templates = {
               <label>Escolha o item</label><br /><br />
               <select name="item_id" required>
                 <% products.forEach(item => { %>
-                  <option value="<%= item.id %>"><%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></option>
+                  <option value="<%= item.id %>">
+                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %>
+                    <% if (item.stock_quantity !== null && item.stock_quantity !== undefined) { %>
+                      | Estoque: <%= item.stock_quantity %>
+                    <% } %>
+                  </option>
                 <% }) %>
               </select>
             </div>
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
               <button type="submit">Marcar retirada</button>
+            </div>
+            <div style="max-width:220px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="button" class="btn-pix" onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')">Pagar com Pix</button>
             </div>
           </div>
         </form>
@@ -504,7 +526,7 @@ const templates = {
           <tbody>
             <% withdrawals.forEach(item => { %>
               <tr>
-                <td><%= item.created_at %></td>
+                <td><%= dayjs(item.created_at).format('DD/MM/YYYY HH:mm:ss') %></td>
                 <td><%= item.item_name %></td>
                 <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
               </tr>
@@ -585,9 +607,37 @@ const templates = {
               <label>URL/caminho da imagem</label><br /><br />
               <input type="text" name="image_url" placeholder="/produtos/coca-350ml.jpg" />
             </div>
+            <div>
+              <label>Estoque inicial</label><br /><br />
+              <input type="number" min="0" name="stock_quantity" placeholder="0" />
+            </div>
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
               <button type="submit">Cadastrar produto</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Entrada de estoque</h2>
+        <form method="POST" action="/admin/stock/add">
+          <div class="form-row">
+            <div>
+              <label>Produto</label><br /><br />
+              <select name="product_id" required>
+                <% products.forEach(item => { %>
+                  <option value="<%= item.id %>"><%= item.name %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div>
+              <label>Quantidade recebida</label><br /><br />
+              <input type="number" min="1" name="quantity" placeholder="0" required />
+            </div>
+            <div style="max-width:220px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit">Adicionar estoque</button>
             </div>
           </div>
         </form>
@@ -598,30 +648,30 @@ const templates = {
       <div class="card">
         <h2>Relatórios</h2>
         <form method="GET" action="/reports/xlsx">
-  <div class="form-row">
-    <div>
-      <label>Mês</label><br /><br />
-      <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
-    </div>
-    <div style="max-width:240px;">
-      <label>&nbsp;</label><br /><br />
-      <button type="submit">Baixar Excel</button>
-    </div>
-  </div>
-</form>
+          <div class="form-row">
+            <div>
+              <label>Mês</label><br /><br />
+              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+            </div>
+            <div style="max-width:240px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit">Baixar Excel</button>
+            </div>
+          </div>
+        </form>
 
         <form method="GET" action="/reports/pdf" style="margin-top:14px;">
-  <div class="form-row">
-    <div>
-      <label>Mês</label><br /><br />
-      <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
-    </div>
-    <div style="max-width:240px;">
-      <label>&nbsp;</label><br /><br />
-      <button type="submit" class="btn-soft">Baixar PDF</button>
-    </div>
-  </div>
-</form>
+          <div class="form-row">
+            <div>
+              <label>Mês</label><br /><br />
+              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+            </div>
+            <div style="max-width:240px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit" class="btn-soft">Baixar PDF</button>
+            </div>
+          </div>
+        </form>
       </div>
 
       <div class="card">
@@ -640,7 +690,7 @@ const templates = {
           <tbody>
             <% withdrawalsAll.forEach(item => { %>
               <tr>
-                <td><%= item.created_at %></td>
+                <td><%= dayjs(item.created_at).format('DD/MM/YYYY HH:mm:ss') %></td>
                 <td><%= item.name %></td>
                 <td><%= item.username %></td>
                 <td><%= item.item_name %></td>
@@ -683,19 +733,20 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
       name TEXT UNIQUE NOT NULL,
-      price NUMERIC NOT NULL,
-      image_url TEXT
+      price NUMERIC(10,2) NOT NULL,
+      image_url TEXT,
+      stock_quantity INTEGER NOT NULL DEFAULT 0
     )
   `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS withdrawals (
       id SERIAL PRIMARY KEY,
-      user_id INTEGER NOT NULL,
-      item_id INTEGER,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      item_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
       item_name TEXT NOT NULL,
-      item_price NUMERIC NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
+      item_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -704,18 +755,18 @@ async function initDB() {
 
   await pool.query(
     `
-    INSERT INTO users (id, name, username, password_hash, role)
-    VALUES (1, 'Administrador', 'admin', $1, 'admin')
-    ON CONFLICT (id) DO NOTHING
+    INSERT INTO users (name, username, password_hash, role)
+    VALUES ('Administrador', 'admin', $1, 'admin')
+    ON CONFLICT (username) DO NOTHING
     `,
     [adminPasswordHash]
   );
 
   await pool.query(
     `
-    INSERT INTO users (id, name, username, password_hash, role)
-    VALUES (2, 'Financeiro', 'financeiro', $1, 'finance')
-    ON CONFLICT (id) DO NOTHING
+    INSERT INTO users (name, username, password_hash, role)
+    VALUES ('Financeiro', 'financeiro', $1, 'finance')
+    ON CONFLICT (username) DO NOTHING
     `,
     [financePasswordHash]
   );
@@ -744,13 +795,16 @@ app.get('/', (req, res) => {
   res.render('login', { error: null });
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
-  db.get(`SELECT * FROM users WHERE username = ?`, [username], (err, user) => {
-    if (err) {
-      return res.render('login', { error: 'Erro interno ao tentar entrar.' });
-    }
+  try {
+    const result = await pool.query(
+      `SELECT * FROM users WHERE username = $1`,
+      [username]
+    );
+
+    const user = result.rows[0];
 
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
       return res.render('login', { error: 'Usuário ou senha inválidos.' });
@@ -764,14 +818,17 @@ app.post('/login', (req, res) => {
     };
 
     res.redirect('/dashboard');
-  });
+  } catch (err) {
+    console.error(err);
+    res.render('login', { error: 'Erro interno ao tentar entrar.' });
+  }
 });
 
 app.get('/register', (req, res) => {
   res.render('register', { success: null, error: null });
 });
 
-app.post('/register', (req, res) => {
+app.post('/register', async (req, res) => {
   const { name, username, password } = req.body;
 
   if (!name || !username || !password) {
@@ -781,115 +838,113 @@ app.post('/register', (req, res) => {
     });
   }
 
-  const passwordHash = bcrypt.hashSync(password, 10);
+  try {
+    const passwordHash = bcrypt.hashSync(password, 10);
 
-  db.run(
-    `INSERT INTO users (name, username, password_hash, role) VALUES (?, ?, ?, 'employee')`,
-    [name.trim(), username.trim(), passwordHash],
-    function (err) {
-      if (err) {
-        return res.render('register', {
-          success: null,
-          error: 'Não foi possível criar o usuário. Esse login pode já existir.'
-        });
-      }
+    await pool.query(
+      `INSERT INTO users (name, username, password_hash, role)
+       VALUES ($1, $2, $3, 'employee')`,
+      [name.trim(), username.trim(), passwordHash]
+    );
 
-      res.render('register', {
-        success: 'Usuário criado com sucesso. Agora você já pode entrar no sistema.',
-        error: null
-      });
-    }
-  );
+    res.render('register', {
+      success: 'Usuário criado com sucesso. Agora você já pode entrar no sistema.',
+      error: null
+    });
+  } catch (err) {
+    console.error(err);
+    res.render('register', {
+      success: null,
+      error: 'Não foi possível criar o usuário. Esse login pode já existir.'
+    });
+  }
 });
 
-app.get('/dashboard', requireAuth, (req, res) => {
+app.get('/dashboard', requireAuth, async (req, res) => {
   const user = req.session.user;
   const message = req.session.message || null;
   req.session.message = null;
 
-  db.all(`SELECT id, name, price, image_url FROM products ORDER BY name ASC`, [], (productErr, products) => {
-    if (productErr) products = [];
+  try {
+    const productsResult = await pool.query(
+      `SELECT id, name, price, image_url, stock_quantity
+       FROM products
+       ORDER BY name ASC`
+    );
+
+    const products = productsResult.rows;
 
     if (user.role === 'employee') {
-      db.all(
-        `SELECT id, item_name, item_price, created_at FROM withdrawals WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT 20`,
-        [user.id],
-        (err, withdrawals) => {
-          if (err) withdrawals = [];
-          res.render('dashboard', {
-            user,
-            products,
-            withdrawals,
-            withdrawalsAll: [],
-            summaryByUser: [],
-            users: [],
-            message
-          });
-        }
+      const withdrawalsResult = await pool.query(
+        `SELECT id, item_name, item_price, created_at
+         FROM withdrawals
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [user.id]
       );
-      return;
+
+      return res.render('dashboard', {
+        user,
+        products,
+        withdrawals: withdrawalsResult.rows,
+        withdrawalsAll: [],
+        summaryByUser: [],
+        users: [],
+        message,
+        dayjs
+      });
     }
 
-    db.all(
+    const withdrawalsAllResult = await pool.query(
       `
       SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
       FROM withdrawals w
       INNER JOIN users u ON u.id = w.user_id
-      ORDER BY datetime(w.created_at) DESC
+      ORDER BY w.created_at DESC
       LIMIT 100
-      `,
-      [],
-      (withdrawErr, withdrawalsAll) => {
-        if (withdrawErr) withdrawalsAll = [];
-
-        db.all(
-          `
-          SELECT
-            u.name,
-            COUNT(w.id) AS total_items,
-            COALESCE(SUM(w.item_price), 0) AS total_value
-          FROM users u
-          LEFT JOIN withdrawals w ON w.user_id = u.id
-          WHERE u.role = 'employee'
-          GROUP BY u.id, u.name
-          ORDER BY total_value DESC, total_items DESC, u.name ASC
-          `,
-          [],
-          (summaryErr, summaryByUser) => {
-            if (summaryErr) summaryByUser = [];
-
-            const finishRender = (usersList) => {
-              res.render('dashboard', {
-                user,
-                products,
-                withdrawals: [],
-                withdrawalsAll,
-                summaryByUser,
-                users: usersList || [],
-                message
-              });
-            };
-
-            if (user.role === 'admin') {
-              db.all(
-                `SELECT id, name, username, role FROM users ORDER BY role ASC, name ASC`,
-                [],
-                (usersErr, usersList) => {
-                  if (usersErr) usersList = [];
-                  finishRender(usersList);
-                }
-              );
-            } else {
-              finishRender([]);
-            }
-          }
-        );
-      }
+      `
     );
-  });
+
+    const summaryByUserResult = await pool.query(
+      `
+      SELECT
+        u.name,
+        COUNT(w.id) AS total_items,
+        COALESCE(SUM(w.item_price), 0) AS total_value
+      FROM users u
+      LEFT JOIN withdrawals w ON w.user_id = u.id
+      WHERE u.role = 'employee'
+      GROUP BY u.id, u.name
+      ORDER BY total_value DESC, total_items DESC, u.name ASC
+      `
+    );
+
+    let users = [];
+    if (user.role === 'admin') {
+      const usersResult = await pool.query(
+        `SELECT id, name, username, role FROM users ORDER BY role ASC, name ASC`
+      );
+      users = usersResult.rows;
+    }
+
+    res.render('dashboard', {
+      user,
+      products,
+      withdrawals: [],
+      withdrawalsAll: withdrawalsAllResult.rows,
+      summaryByUser: summaryByUserResult.rows,
+      users,
+      message,
+      dayjs
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao carregar dashboard.');
+  }
 });
 
-app.post('/withdraw', requireAuth, (req, res) => {
+app.post('/withdraw', requireAuth, async (req, res) => {
   const user = req.session.user;
 
   if (user.role !== 'employee') {
@@ -897,31 +952,57 @@ app.post('/withdraw', requireAuth, (req, res) => {
   }
 
   const { item_id } = req.body;
-  const createdAt = dayjs().format('YYYY-MM-DD HH:mm:ss');
 
-  db.get(`SELECT * FROM products WHERE id = ?`, [item_id], (productErr, product) => {
-    if (productErr || !product) {
+  try {
+    const productResult = await pool.query(
+      `SELECT * FROM products WHERE id = $1`,
+      [item_id]
+    );
+
+    const product = productResult.rows[0];
+
+    if (!product) {
       req.session.message = 'Produto não encontrado.';
       return res.redirect('/dashboard');
     }
 
-    db.run(
-      `INSERT INTO withdrawals (user_id, item_id, item_name, item_price, created_at) VALUES (?, ?, ?, ?, ?)`,
-      [user.id, product.id, product.name, product.price, createdAt],
-      function (err) {
-        if (err) {
-          req.session.message = 'Erro ao registrar retirada.';
-          return res.redirect('/dashboard');
-        }
+    if (Number(product.stock_quantity) <= 0) {
+      req.session.message = 'Este produto está sem estoque.';
+      return res.redirect('/dashboard');
+    }
 
-        req.session.message = `Retirada registrada com sucesso: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
-        res.redirect('/dashboard');
-      }
+    await pool.query('BEGIN');
+
+    await pool.query(
+      `
+      INSERT INTO withdrawals (user_id, item_id, item_name, item_price)
+      VALUES ($1, $2, $3, $4)
+      `,
+      [user.id, product.id, product.name, product.price]
     );
-  });
+
+    await pool.query(
+      `
+      UPDATE products
+      SET stock_quantity = stock_quantity - 1
+      WHERE id = $1
+      `,
+      [product.id]
+    );
+
+    await pool.query('COMMIT');
+
+    req.session.message = \`Retirada registrada com sucesso: \${product.name} - R$ \${Number(product.price).toFixed(2).replace('.', ',')}.\`;
+    res.redirect('/dashboard');
+  } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    req.session.message = 'Erro ao registrar retirada.';
+    res.redirect('/dashboard');
+  }
 });
 
-app.post('/admin/users', requireAdmin, (req, res) => {
+app.post('/admin/users', requireAdmin, async (req, res) => {
   const { name, username, password, role } = req.body;
 
   if (!name || !username || !password || !role) {
@@ -934,230 +1015,282 @@ app.post('/admin/users', requireAdmin, (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  const passwordHash = bcrypt.hashSync(password, 10);
+  try {
+    const passwordHash = bcrypt.hashSync(password, 10);
 
-  db.run(
-    `INSERT INTO users (name, username, password_hash, role) VALUES (?, ?, ?, ?)`,
-    [name.trim(), username.trim(), passwordHash, role],
-    function (err) {
-      if (err) {
-        req.session.message = 'Não foi possível cadastrar o usuário.';
-        return res.redirect('/dashboard');
-      }
+    await pool.query(
+      `INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, $4)`,
+      [name.trim(), username.trim(), passwordHash, role]
+    );
 
-      req.session.message = 'Usuário cadastrado com sucesso.';
-      res.redirect('/dashboard');
-    }
-  );
+    req.session.message = 'Usuário cadastrado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Não foi possível cadastrar o usuário.';
+    res.redirect('/dashboard');
+  }
 });
 
-app.post('/admin/products', requireAdmin, (req, res) => {
-  const { name, price, image_url } = req.body;
+app.post('/admin/products', requireAdmin, async (req, res) => {
+  const { name, price, image_url, stock_quantity } = req.body;
 
   if (!name || price === undefined || price === '') {
     req.session.message = 'Preencha nome e preço do produto.';
     return res.redirect('/dashboard');
   }
 
-  db.run(
-    `INSERT INTO products (name, price, image_url) VALUES (?, ?, ?)`,
-    [name.trim(), Number(price), image_url ? image_url.trim() : ''],
-    function (err) {
-      if (err) {
-        req.session.message = 'Não foi possível cadastrar o produto.';
-        return res.redirect('/dashboard');
-      }
+  try {
+    await pool.query(
+      `INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)`,
+      [
+        name.trim(),
+        Number(price),
+        image_url ? image_url.trim() : '',
+        Number(stock_quantity || 0),
+      ]
+    );
 
-      req.session.message = 'Produto cadastrado com sucesso.';
-      res.redirect('/dashboard');
-    }
-  );
+    req.session.message = 'Produto cadastrado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Não foi possível cadastrar o produto.';
+    res.redirect('/dashboard');
+  }
 });
 
-app.post('/admin/products/:id/update', requireAdmin, (req, res) => {
+app.post('/admin/products/:id/update', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const { name, price, image_url } = req.body;
+  const { name, price, image_url, stock_quantity } = req.body;
 
   if (!name || price === undefined || price === '') {
     req.session.message = 'Preencha nome e preço para atualizar.';
     return res.redirect('/dashboard');
   }
 
-  db.run(
-    `UPDATE products SET name = ?, price = ?, image_url = ? WHERE id = ?`,
-    [name.trim(), Number(price), image_url ? image_url.trim() : '', id],
-    function (err) {
-      if (err) {
-        req.session.message = 'Erro ao atualizar produto.';
-        return res.redirect('/dashboard');
-      }
+  try {
+    await pool.query(
+      `
+      UPDATE products
+      SET name = $1, price = $2, image_url = $3, stock_quantity = $4
+      WHERE id = $5
+      `,
+      [
+        name.trim(),
+        Number(price),
+        image_url ? image_url.trim() : '',
+        Number(stock_quantity || 0),
+        id,
+      ]
+    );
 
-      req.session.message = 'Produto atualizado com sucesso.';
-      res.redirect('/dashboard');
-    }
-  );
+    req.session.message = 'Produto atualizado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao atualizar produto.';
+    res.redirect('/dashboard');
+  }
 });
 
-app.post('/admin/products/:id/delete', requireAdmin, (req, res) => {
+app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
-  db.get(`SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = ?`, [id], (countErr, row) => {
-    if (countErr) {
-      req.session.message = 'Erro ao validar exclusão do produto.';
-      return res.redirect('/dashboard');
-    }
+  try {
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = $1`,
+      [id]
+    );
 
-    if (row && row.total > 0) {
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    if (total > 0) {
       req.session.message = 'Não é possível excluir um produto que já possui lançamentos.';
       return res.redirect('/dashboard');
     }
 
-    db.run(`DELETE FROM products WHERE id = ?`, [id], function (err) {
-      if (err) {
-        req.session.message = 'Erro ao excluir produto.';
-        return res.redirect('/dashboard');
-      }
+    await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
 
-      req.session.message = 'Produto excluído com sucesso.';
-      res.redirect('/dashboard');
-    });
-  });
+    req.session.message = 'Produto excluído com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao excluir produto.';
+    res.redirect('/dashboard');
+  }
 });
 
-app.post('/admin/withdrawals/:id/delete', requireAdmin, (req, res) => {
+app.post('/admin/stock/add', requireAdmin, async (req, res) => {
+  const { product_id, quantity } = req.body;
+
+  if (!product_id || !quantity || Number(quantity) <= 0) {
+    req.session.message = 'Informe um produto e uma quantidade válida.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    await pool.query(
+      `
+      UPDATE products
+      SET stock_quantity = stock_quantity + $1
+      WHERE id = $2
+      `,
+      [Number(quantity), product_id]
+    );
+
+    req.session.message = 'Estoque atualizado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao atualizar estoque.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
-  db.run(`DELETE FROM withdrawals WHERE id = ?`, [id], function (err) {
-    if (err) {
-      req.session.message = 'Erro ao excluir lançamento.';
-      return res.redirect('/dashboard');
-    }
+  try {
+    await pool.query(`DELETE FROM withdrawals WHERE id = $1`, [id]);
 
     req.session.message = 'Lançamento excluído com sucesso.';
     res.redirect('/dashboard');
-  });
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao excluir lançamento.';
+    res.redirect('/dashboard');
+  }
 });
 
-app.get('/reports/xlsx', requireFinanceOrAdmin, (req, res) => {
+app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   const { month } = req.query;
 
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+  if (!month || !/^\\d{4}-\\d{2}$/.test(month)) {
     return res.status(400).send('Informe o mês no formato YYYY-MM.');
   }
 
-  const start = `${month}-01 00:00:00`;
-  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD 00:00:00');
+  const start = \`\${month}-01\`;
+  const end = dayjs(\`\${month}-01\`).add(1, 'month').format('YYYY-MM-DD');
 
-  db.all(
-    `
-    SELECT
-      u.name AS Colaborador,
-      u.username AS Usuario,
-      w.item_name AS Item,
-      w.item_price AS Valor,
-      w.created_at AS DataHora
-    FROM withdrawals w
-    INNER JOIN users u ON u.id = w.user_id
-    WHERE w.created_at >= ? AND w.created_at < ?
-    ORDER BY u.name ASC, w.created_at ASC
-    `,
-    [start, end],
-    (err, rows) => {
-      if (err) return res.status(500).send('Erro ao gerar relatório.');
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        u.name AS "Colaborador",
+        u.username AS "Usuario",
+        w.item_name AS "Item",
+        w.item_price AS "Valor",
+        TO_CHAR(w.created_at, 'DD/MM/YYYY HH24:MI:SS') AS "DataHora"
+      FROM withdrawals w
+      INNER JOIN users u ON u.id = w.user_id
+      WHERE w.created_at >= $1 AND w.created_at < $2
+      ORDER BY u.name ASC, w.created_at ASC
+      `,
+      [start, end]
+    );
 
-      const resumoPorPessoa = {};
-      for (const row of rows) {
-        if (!resumoPorPessoa[row.Colaborador]) {
-          resumoPorPessoa[row.Colaborador] = { total: 0, valor: 0 };
-        }
-        resumoPorPessoa[row.Colaborador].total += 1;
-        resumoPorPessoa[row.Colaborador].valor += Number(row.Valor || 0);
+    const rows = result.rows;
+
+    const resumoPorPessoa = {};
+    for (const row of rows) {
+      if (!resumoPorPessoa[row.Colaborador]) {
+        resumoPorPessoa[row.Colaborador] = { total: 0, valor: 0 };
       }
-
-      const resumoSheet = Object.entries(resumoPorPessoa).map(([colaborador, dados]) => ({
-        Colaborador: colaborador,
-        TotalRetiradas: dados.total,
-        TotalEmReais: Number(dados.valor.toFixed(2)),
-      }));
-
-      const workbook = XLSX.utils.book_new();
-      const detalheWs = XLSX.utils.json_to_sheet(rows);
-      const resumoWs = XLSX.utils.json_to_sheet(resumoSheet);
-
-      XLSX.utils.book_append_sheet(workbook, detalheWs, 'Detalhado');
-      XLSX.utils.book_append_sheet(workbook, resumoWs, 'Resumo');
-
-      const fileName = `relatorio-bebidas-${month}.xlsx`;
-      const filePath = path.join(baseDir, fileName);
-
-      XLSX.writeFile(workbook, filePath);
-
-      res.download(filePath, fileName, (downloadErr) => {
-        if (downloadErr) console.error(downloadErr);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      });
+      resumoPorPessoa[row.Colaborador].total += 1;
+      resumoPorPessoa[row.Colaborador].valor += Number(row.Valor || 0);
     }
-  );
+
+    const resumoSheet = Object.entries(resumoPorPessoa).map(([colaborador, dados]) => ({
+      Colaborador: colaborador,
+      TotalRetiradas: dados.total,
+      TotalEmReais: Number(dados.valor.toFixed(2)),
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const detalheWs = XLSX.utils.json_to_sheet(rows);
+    const resumoWs = XLSX.utils.json_to_sheet(resumoSheet);
+
+    XLSX.utils.book_append_sheet(workbook, detalheWs, 'Detalhado');
+    XLSX.utils.book_append_sheet(workbook, resumoWs, 'Resumo');
+
+    const fileName = \`relatorio-bebidas-\${month}.xlsx\`;
+    const filePath = path.join(baseDir, fileName);
+
+    XLSX.writeFile(workbook, filePath);
+
+    res.download(filePath, fileName, (downloadErr) => {
+      if (downloadErr) console.error(downloadErr);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao gerar relatório.');
+  }
 });
 
-app.get('/reports/pdf', requireFinanceOrAdmin, (req, res) => {
+app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
   const { month } = req.query;
 
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+  if (!month || !/^\\d{4}-\\d{2}$/.test(month)) {
     return res.status(400).send('Informe o mês no formato YYYY-MM.');
   }
 
-  const start = `${month}-01 00:00:00`;
-  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD 00:00:00');
+  const start = \`\${month}-01\`;
+  const end = dayjs(\`\${month}-01\`).add(1, 'month').format('YYYY-MM-DD');
 
-  db.all(
-    `
-    SELECT
-      u.name AS Colaborador,
-      u.username AS Usuario,
-      w.item_name AS Item,
-      w.item_price AS Valor,
-      w.created_at AS DataHora
-    FROM withdrawals w
-    INNER JOIN users u ON u.id = w.user_id
-    WHERE w.created_at >= ? AND w.created_at < ?
-    ORDER BY u.name ASC, w.created_at ASC
-    `,
-    [start, end],
-    (err, rows) => {
-      if (err) return res.status(500).send('Erro ao gerar PDF.');
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        u.name AS "Colaborador",
+        u.username AS "Usuario",
+        w.item_name AS "Item",
+        w.item_price AS "Valor",
+        w.created_at AS "DataHora"
+      FROM withdrawals w
+      INNER JOIN users u ON u.id = w.user_id
+      WHERE w.created_at >= $1 AND w.created_at < $2
+      ORDER BY u.name ASC, w.created_at ASC
+      `,
+      [start, end]
+    );
 
-      const fileName = `relatorio-bebidas-${month}.pdf`;
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    const rows = result.rows;
 
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
-      doc.pipe(res);
+    const fileName = \`relatorio-bebidas-\${month}.pdf\`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', \`attachment; filename="\${fileName}"\`);
 
-      const logoPath = path.join(publicDir, 'logo-empresa.jpg');
-      if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 40, 30, { fit: [60, 60] });
-      }
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    doc.pipe(res);
 
-      doc.fontSize(18).text('Relatório Mensal de Bebidas', 120, 40);
-      doc.fontSize(12).text(`Mês: ${month}`, 120, 65);
-      doc.moveDown(3);
-
-      let totalGeral = 0;
-
-      rows.forEach((row, index) => {
-        totalGeral += Number(row.Valor || 0);
-        doc.fontSize(10).text(
-          `${index + 1}. ${row.DataHora} | ${row.Colaborador} | ${row.Usuario} | ${row.Item} | R$ ${Number(row.Valor).toFixed(2).replace('.', ',')}`
-        );
-      });
-
-      doc.moveDown();
-      doc.fontSize(12).text(`Total de lançamentos: ${rows.length}`);
-      doc.fontSize(12).text(`Total em reais: R$ ${totalGeral.toFixed(2).replace('.', ',')}`);
-      doc.end();
+    const logoPath = path.join(publicDir, 'logo-empresa.jpg');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 40, 30, { fit: [60, 60] });
     }
-  );
+
+    doc.fontSize(18).text('Relatório Mensal de Bebidas', 120, 40);
+    doc.fontSize(12).text(\`Mês: \${month}\`, 120, 65);
+    doc.moveDown(3);
+
+    let totalGeral = 0;
+
+    rows.forEach((row, index) => {
+      totalGeral += Number(row.Valor || 0);
+      doc.fontSize(10).text(
+        \`\${index + 1}. \${dayjs(row.DataHora).format('DD/MM/YYYY HH:mm:ss')} | \${row.Colaborador} | \${row.Usuario} | \${row.Item} | R$ \${Number(row.Valor).toFixed(2).replace('.', ',')}\`
+      );
+    });
+
+    doc.moveDown();
+    doc.fontSize(12).text(\`Total de lançamentos: \${rows.length}\`);
+    doc.fontSize(12).text(\`Total em reais: R$ \${totalGeral.toFixed(2).replace('.', ',')}\`);
+    doc.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao gerar PDF.');
+  }
 });
 
 app.get('/logout', (req, res) => {
@@ -1166,12 +1299,10 @@ app.get('/logout', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
+      console.log(\`Servidor rodando em http://0.0.0.0:\${PORT}\`);
     });
   })
   .catch((err) => {
