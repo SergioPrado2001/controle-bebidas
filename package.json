@@ -1,0 +1,23 @@
+{
+  "name": "controle-bebidas",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dayjs": "^1.11.20",
+    "ejs": "^5.0.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "pdfkit": "^0.18.0",
+    "sqlite3": "^6.0.1",
+    "xlsx": "^0.18.5"
+  }
+}
