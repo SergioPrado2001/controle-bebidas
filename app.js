@@ -13,9 +13,7 @@ const PORT = process.env.PORT || 3000;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
 });
 
 const baseDir = __dirname;
@@ -324,9 +322,7 @@ const templates = {
       background:rgba(255,255,255,.05);
       color:var(--text);
     }
-    select option {
-      color:#000;
-    }
+    select option { color:#000; }
     button {
       background:linear-gradient(135deg, var(--accent), var(--accent2));
       color:#fff;
@@ -433,12 +429,6 @@ const templates = {
       vertical-align:top;
     }
     a { text-decoration:none; color:inherit; }
-
-    @media (max-width: 768px) {
-      .price, .value {
-        font-size:22px;
-      }
-    }
   </style>
 </head>
 <body>
@@ -497,18 +487,10 @@ const templates = {
             <% if (user.role === 'admin') { %>
               <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
                 <div class="form-row">
-                  <div>
-                    <input type="text" name="name" value="<%= item.name %>" required />
-                  </div>
-                  <div>
-                    <input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required />
-                  </div>
-                  <div>
-                    <input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" />
-                  </div>
-                  <div>
-                    <input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" />
-                  </div>
+                  <div><input type="text" name="name" value="<%= item.name %>" required /></div>
+                  <div><input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required /></div>
+                  <div><input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" /></div>
+                  <div><input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" /></div>
                 </div>
 
                 <div class="actions" style="margin-top:10px;">
@@ -549,11 +531,7 @@ const templates = {
 
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
-              <button
-                type="button"
-                class="btn-pix"
-                onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')"
-              >
+              <button type="button" class="btn-pix" onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')">
                 Pagar com Pix
               </button>
             </div>
@@ -589,18 +567,9 @@ const templates = {
         <h2>Cadastrar usuário</h2>
         <form method="POST" action="/admin/users">
           <div class="form-row">
-            <div>
-              <label>Nome completo</label><br /><br />
-              <input type="text" name="name" placeholder="Nome completo" required />
-            </div>
-            <div>
-              <label>Usuário</label><br /><br />
-              <input type="text" name="username" placeholder="usuario" required />
-            </div>
-            <div>
-              <label>Senha</label><br /><br />
-              <input type="password" name="password" placeholder="Senha" required />
-            </div>
+            <div><label>Nome completo</label><br /><br /><input type="text" name="name" placeholder="Nome completo" required /></div>
+            <div><label>Usuário</label><br /><br /><input type="text" name="username" placeholder="usuario" required /></div>
+            <div><label>Senha</label><br /><br /><input type="password" name="password" placeholder="Senha" required /></div>
             <div>
               <label>Perfil</label><br /><br />
               <select name="role" required>
@@ -609,10 +578,7 @@ const templates = {
                 <option value="admin">Admin</option>
               </select>
             </div>
-            <div style="max-width:220px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="submit">Cadastrar usuário</button>
-            </div>
+            <div style="max-width:220px;"><label>&nbsp;</label><br /><br /><button type="submit">Cadastrar usuário</button></div>
           </div>
         </form>
       </div>
@@ -643,26 +609,11 @@ const templates = {
         <h2>Cadastrar produto</h2>
         <form method="POST" action="/admin/products">
           <div class="form-row">
-            <div>
-              <label>Nome do produto</label><br /><br />
-              <input type="text" name="name" placeholder="Ex.: Coca-Cola 350ml" required />
-            </div>
-            <div>
-              <label>Preço</label><br /><br />
-              <input type="number" step="0.01" min="0" name="price" placeholder="0.00" required />
-            </div>
-            <div>
-              <label>URL/caminho da imagem</label><br /><br />
-              <input type="text" name="image_url" placeholder="/produtos/coca-350ml.jpg" />
-            </div>
-            <div>
-              <label>Estoque inicial</label><br /><br />
-              <input type="number" min="0" name="stock_quantity" placeholder="0" />
-            </div>
-            <div style="max-width:220px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="submit">Cadastrar produto</button>
-            </div>
+            <div><label>Nome do produto</label><br /><br /><input type="text" name="name" placeholder="Ex.: Coca-Cola 350ml" required /></div>
+            <div><label>Preço</label><br /><br /><input type="number" step="0.01" min="0" name="price" placeholder="0.00" required /></div>
+            <div><label>URL/caminho da imagem</label><br /><br /><input type="text" name="image_url" placeholder="/produtos/coca-350ml.jpg" /></div>
+            <div><label>Estoque inicial</label><br /><br /><input type="number" min="0" name="stock_quantity" placeholder="0" /></div>
+            <div style="max-width:220px;"><label>&nbsp;</label><br /><br /><button type="submit">Cadastrar produto</button></div>
           </div>
         </form>
       </div>
@@ -675,9 +626,7 @@ const templates = {
               <label>Produto</label><br /><br />
               <select name="product_id" required>
                 <% products.forEach(item => { %>
-                  <option value="<%= item.id %>">
-                    <%= item.name %> | Estoque atual: <%= item.stock_quantity %>
-                  </option>
+                  <option value="<%= item.id %>"><%= item.name %> | Estoque atual: <%= item.stock_quantity %></option>
                 <% }) %>
               </select>
             </div>
@@ -992,49 +941,6 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   }
 });
 
-    const withdrawalsAllResult = await pool.query(
-      `
-      SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
-      FROM withdrawals w
-      INNER JOIN users u ON u.id = w.user_id
-      ORDER BY w.created_at DESC
-      LIMIT 100
-      `
-    );
-
-    const summaryByUserResult = await pool.query(
-      `
-      SELECT
-        u.name,
-        COUNT(w.id) AS total_items,
-        COALESCE(SUM(w.item_price), 0) AS total_value
-      FROM users u
-      LEFT JOIN withdrawals w ON w.user_id = u.id
-      WHERE u.role = 'employee'
-      GROUP BY u.id, u.name
-      ORDER BY total_value DESC, total_items DESC, u.name ASC
-      `
-    );
-
-    let users = [];
-    if (user.role === 'admin') {
-      const usersResult = await pool.query(
-        `SELECT id, name, username, role FROM users ORDER BY role ASC, name ASC`
-      );
-      users = usersResult.rows;
-    }
-
-    res.render('dashboard', {
-  user,
-  products,
-  withdrawals,
-  withdrawalsAll,
-  summaryByUser,
-  users,
-  message,
-  dayjs
-});
-
 app.post('/withdraw', requireAuth, async (req, res) => {
   const user = req.session.user;
 
@@ -1261,8 +1167,8 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     return res.status(400).send('Informe o mês no formato YYYY-MM.');
   }
 
-  const start = \`\${month}-01\`;
-  const end = dayjs(\`\${month}-01\`).add(1, 'month').format('YYYY-MM-DD');
+  const start = `${month}-01`;
+  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD');
 
   try {
     const result = await pool.query(
@@ -1305,7 +1211,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     XLSX.utils.book_append_sheet(workbook, detalheWs, 'Detalhado');
     XLSX.utils.book_append_sheet(workbook, resumoWs, 'Resumo');
 
-    const fileName = \`relatorio-bebidas-${month}.xlsx`;
+    const fileName = `relatorio-bebidas-${month}.xlsx`;
     const filePath = path.join(baseDir, fileName);
 
     XLSX.writeFile(workbook, filePath);
@@ -1327,8 +1233,8 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
     return res.status(400).send('Informe o mês no formato YYYY-MM.');
   }
 
-  const start = \`\${month}-01\`;
-  const end = dayjs(\`\${month}-01\`).add(1, 'month').format('YYYY-MM-DD');
+  const start = `${month}-01`;
+  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD');
 
   try {
     const result = await pool.query(
@@ -1349,9 +1255,9 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
 
     const rows = result.rows;
 
-    const fileName = \`relatorio-bebidas-\${month}.pdf\`;
+    const fileName = `relatorio-bebidas-${month}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', \`attachment; filename="\${fileName}"\`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
     doc.pipe(res);
@@ -1362,7 +1268,7 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
     }
 
     doc.fontSize(18).text('Relatório Mensal de Bebidas', 120, 40);
-    doc.fontSize(12).text(\`Mês: \${month}\`, 120, 65);
+    doc.fontSize(12).text(`Mês: ${month}`, 120, 65);
     doc.moveDown(3);
 
     let totalGeral = 0;
@@ -1370,13 +1276,13 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
     rows.forEach((row, index) => {
       totalGeral += Number(row.Valor || 0);
       doc.fontSize(10).text(
-        \`\${index + 1}. \${dayjs(row.DataHora).format('DD/MM/YYYY HH:mm:ss')} | \${row.Colaborador} | \${row.Usuario} | \${row.Item} | R$ \${Number(row.Valor).toFixed(2).replace('.', ',')}\`
+        `${index + 1}. ${dayjs(row.DataHora).format('DD/MM/YYYY HH:mm:ss')} | ${row.Colaborador} | ${row.Usuario} | ${row.Item} | R$ ${Number(row.Valor).toFixed(2).replace('.', ',')}`
       );
     });
 
     doc.moveDown();
-    doc.fontSize(12).text(\`Total de lançamentos: \${rows.length}\`);
-    doc.fontSize(12).text(\`Total em reais: R$ \${totalGeral.toFixed(2).replace('.', ',')}\`);
+    doc.fontSize(12).text(`Total de lançamentos: ${rows.length}`);
+    doc.fontSize(12).text(`Total em reais: R$ ${totalGeral.toFixed(2).replace('.', ',')}`);
     doc.end();
   } catch (err) {
     console.error(err);
