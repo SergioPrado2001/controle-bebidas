@@ -750,26 +750,7 @@ async function initDB() {
     )
   `);
 
-  const adminPasswordHash = bcrypt.hashSync('123456', 10);
-  const financePasswordHash = bcrypt.hashSync('123456', 10);
-
-  await pool.query(
-    `
-    INSERT INTO users (name, username, password_hash, role)
-    VALUES ('Administrador', 'admin', $1, 'admin')
-    ON CONFLICT (username) DO NOTHING
-    `,
-    [adminPasswordHash]
-  );
-
-  await pool.query(
-    `
-    INSERT INTO users (name, username, password_hash, role)
-    VALUES ('Financeiro', 'financeiro', $1, 'finance')
-    ON CONFLICT (username) DO NOTHING
-    `,
-    [financePasswordHash]
-  );
+  
 
   await pool.query(
     `
