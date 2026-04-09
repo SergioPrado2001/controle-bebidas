@@ -1,0 +1,1339 @@
+const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
+const path = require('path');
+const fs = require('fs');
+const XLSX = require('xlsx');
+const PDFDocument = require('pdfkit');
+const dayjs = require('dayjs');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+});
+
+const baseDir = __dirname;
+const viewsDir = path.join(baseDir, 'views');
+const publicDir = path.join(baseDir, 'public');
+
+if (!fs.existsSync(viewsDir)) fs.mkdirSync(viewsDir, { recursive: true });
+if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.static(publicDir));
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'segredo-super-seguro-troque-isso',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 12,
+    },
+  })
+);
+
+app.set('view engine', 'ejs');
+app.set('views', viewsDir);
+
+const templates = {
+  'login.ejs': `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <style>
+    :root {
+      --bg:#051426;
+      --card:#0d2b4f;
+      --border:rgba(255,255,255,.12);
+      --text:#eef4ff;
+      --muted:#b8c8e6;
+      --accent:#2563eb;
+      --accent2:#5a8dff;
+      --danger:#ff8a97;
+    }
+    * { box-sizing:border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      margin:0;
+      min-height:100vh;
+      background: radial-gradient(circle at top, #144a85 0%, #0a2342 32%, #051426 100%);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+    .box {
+      width:100%;
+      max-width:520px;
+      background:rgba(13,43,79,.95);
+      padding:32px;
+      border-radius:24px;
+      box-shadow:0 18px 45px rgba(0,0,0,.35);
+      border:1px solid var(--border);
+    }
+    .brand { text-align:center; margin-bottom:22px; }
+    .logo-wrap {
+      width:92px; height:92px; margin:0 auto 16px; background:#fff; border-radius:22px;
+      display:flex; align-items:center; justify-content:center; box-shadow:0 10px 25px rgba(0,0,0,.25);
+      overflow:hidden;
+    }
+    .logo-wrap img { width:72px; height:72px; object-fit:contain; }
+    h1 { margin:0 0 8px; font-size:30px; }
+    .subtitle { color:var(--muted); line-height:1.5; }
+    input, button {
+      width:100%; padding:14px; margin-top:12px; border-radius:14px;
+      border:1px solid var(--border); box-sizing:border-box;
+      background:rgba(255,255,255,.05); color:var(--text);
+    }
+    input::placeholder { color:#97afd6; }
+    button {
+      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      color:#fff; border:none; cursor:pointer; font-weight:700;
+    }
+    .msg {
+      background:rgba(255,138,151,.15); color:#ffd8dd; padding:12px; border-radius:12px;
+      margin-top:12px; border:1px solid rgba(255,138,151,.18);
+    }
+    .link {
+      margin-top:18px;
+      text-align:center;
+    }
+    .link a {
+      color:#d7e6ff;
+      text-decoration:none;
+      font-weight:700;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="brand">
+      <div class="logo-wrap">
+        <img src="/logo-empresa.jpg" alt="Logo da empresa" />
+      </div>
+      <h1>Controle de Bebidas</h1>
+      <p class="subtitle">Login do sistema interno.</p>
+    </div>
+
+    <% if (error) { %>
+      <div class="msg"><%= error %></div>
+    <% } %>
+
+    <form method="POST" action="/login">
+      <input type="text" name="username" placeholder="Usuário" required />
+      <input type="password" name="password" placeholder="Senha" required />
+      <button type="submit">Entrar</button>
+    </form>
+
+    <div class="link">
+      <a href="/register">Criar meu usuário</a>
+    </div>
+  </div>
+</body>
+</html>
+`,
+
+  'register.ejs': `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Criar meu usuário</title>
+  <style>
+    :root {
+      --bg:#051426;
+      --card:#0d2b4f;
+      --border:rgba(255,255,255,.12);
+      --text:#eef4ff;
+      --muted:#b8c8e6;
+      --accent:#2563eb;
+      --accent2:#5a8dff;
+      --success:#25c18c;
+      --danger:#ff8a97;
+    }
+    * { box-sizing:border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: radial-gradient(circle at top, #144a85 0%, #0a2342 32%, #051426 100%);
+      margin:0;
+      min-height:100vh;
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+    .box {
+      max-width:560px;
+      width:100%;
+      background:rgba(13,43,79,.95);
+      padding:30px;
+      border-radius:24px;
+      box-shadow:0 18px 45px rgba(0,0,0,.35);
+      border:1px solid var(--border);
+    }
+    h1 { margin-top:0; font-size:28px; }
+    p { color:var(--muted); }
+    input, button {
+      width:100%;
+      padding:14px;
+      margin-top:12px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      box-sizing:border-box;
+      background:rgba(255,255,255,.05);
+      color:var(--text);
+    }
+    input::placeholder { color:#97afd6; }
+    button {
+      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      color:#fff;
+      border:none;
+      cursor:pointer;
+      font-weight:700;
+    }
+    a { text-decoration:none; color:#d7e6ff; }
+    .msg {
+      background:rgba(37,193,140,.15);
+      color:#defff2;
+      padding:12px;
+      border-radius:12px;
+      margin-top:12px;
+      border:1px solid rgba(37,193,140,.18);
+    }
+    .error {
+      background:rgba(255,138,151,.15);
+      color:#ffd8dd;
+      padding:12px;
+      border-radius:12px;
+      margin-top:12px;
+      border:1px solid rgba(255,138,151,.18);
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Criar meu usuário</h1>
+    <p>Preencha os dados para criar seu acesso como colaborador.</p>
+
+    <% if (success) { %><div class="msg"><%= success %></div><% } %>
+    <% if (error) { %><div class="error"><%= error %></div><% } %>
+
+    <form method="POST" action="/register">
+      <input type="text" name="name" placeholder="Nome completo" required />
+      <input type="text" name="username" placeholder="Usuário" required />
+      <input type="password" name="password" placeholder="Senha" required />
+      <button type="submit">Criar meu usuário</button>
+    </form>
+
+    <p><a href="/">Voltar ao login</a></p>
+  </div>
+</body>
+</html>
+`,
+
+  'dashboard.ejs': `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel</title>
+  <style>
+    :root {
+      --bg:#051426;
+      --card:#0d2b4f;
+      --border:rgba(255,255,255,.12);
+      --text:#eef4ff;
+      --muted:#b8c8e6;
+      --accent:#2563eb;
+      --accent2:#5a8dff;
+      --danger:#ff8a97;
+      --success:#25c18c;
+      --successBg:rgba(37,193,140,.15);
+      --warningBg:rgba(255,193,7,.16);
+      --warningBorder:rgba(255,193,7,.28);
+      --dangerBg:rgba(255,107,132,.14);
+      --dangerBorder:rgba(255,107,132,.22);
+    }
+    * { box-sizing:border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: radial-gradient(circle at top, #144a85 0%, #0a2342 32%, #051426 100%);
+      margin:0;
+      color:var(--text);
+    }
+    .container { max-width:1250px; margin:34px auto; padding:0 16px; }
+    .card {
+      background:rgba(13,43,79,.95);
+      padding:24px;
+      border-radius:20px;
+      box-shadow:0 12px 34px rgba(0,0,0,.25);
+      margin-bottom:20px;
+      border:1px solid var(--border);
+    }
+    .top {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .brand {
+      display:flex;
+      align-items:center;
+      gap:14px;
+    }
+    .brand-box {
+      width:70px;
+      height:70px;
+      border-radius:18px;
+      background:#fff;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      box-shadow:0 10px 26px rgba(0,0,0,.25);
+    }
+    .brand-box img {
+      width:56px;
+      height:56px;
+      object-fit:contain;
+    }
+    .muted { color:var(--muted); }
+    h1,h2,h3 { margin-top:0; }
+    button, select, input {
+      padding:12px 14px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.05);
+      color:var(--text);
+    }
+    select option { color:#000; }
+    button {
+      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      color:#fff;
+      border:none;
+      cursor:pointer;
+      font-weight:700;
+    }
+    .btn-soft { background:linear-gradient(135deg, #284f88, #3f6fb1); }
+    .btn-danger { background:linear-gradient(135deg, #cc314f, #ff6b84); }
+    .btn-pix { background:linear-gradient(135deg, #0d9b73, #21c58b); }
+    .msg {
+      background:rgba(37,193,140,.15);
+      color:#defff2;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid rgba(37,193,140,.18);
+    }
+    .grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+      gap:16px;
+    }
+    .stats {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+      gap:16px;
+    }
+    .stat-card, .info {
+      background:linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:18px;
+    }
+    .value, .price {
+      font-size:28px;
+      font-weight:800;
+      margin-top:6px;
+    }
+    .pill {
+      display:inline-block;
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      color:#dce8ff;
+      font-size:12px;
+    }
+    .product-image {
+      width:100%;
+      max-width:180px;
+      height:180px;
+      object-fit:contain;
+      background:#fff;
+      border-radius:14px;
+      padding:10px;
+      display:block;
+      margin:12px 0;
+    }
+    .stock-box {
+      margin-top:12px;
+      padding:10px 14px;
+      border-radius:12px;
+      font-weight:700;
+    }
+    .stock-ok {
+      background:var(--successBg);
+      border:1px solid rgba(37,193,140,.25);
+      color:#defff2;
+    }
+    .stock-low {
+      background:var(--warningBg);
+      border:1px solid var(--warningBorder);
+      color:#ffe9a6;
+    }
+    .stock-zero {
+      background:var(--dangerBg);
+      border:1px solid var(--dangerBorder);
+      color:#ffd8dd;
+    }
+    .form-row {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:end;
+    }
+    .form-row > div {
+      flex:1;
+      min-width:180px;
+    }
+    .actions {
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    table {
+      width:100%;
+      border-collapse:collapse;
+      margin-top:16px;
+    }
+    th, td {
+      text-align:left;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      padding:12px 8px;
+      vertical-align:top;
+    }
+    a { text-decoration:none; color:inherit; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card top">
+      <div class="brand">
+        <div class="brand-box"><img src="/logo-empresa.jpg" alt="Logo da empresa" /></div>
+        <div>
+          <h1>Controle de Bebidas</h1>
+          <p class="muted">Olá, <strong><%= user.name %></strong> · Perfil: <strong><%= user.role %></strong></p>
+        </div>
+      </div>
+      <div class="actions">
+        <a href="/logout"><button class="btn-soft">Sair</button></a>
+      </div>
+    </div>
+
+    <% if (message) { %>
+      <div class="card"><div class="msg"><%= message %></div></div>
+    <% } %>
+
+    <% if (user.role === 'admin' || user.role === 'finance') { %>
+      <div class="card">
+        <h2>Painel de consumo por colaborador</h2>
+        <div class="stats">
+          <% summaryByUser.forEach(item => { %>
+            <div class="stat-card">
+              <span class="pill"><%= item.name %></span>
+              <div class="value">R$ <%= Number(item.total_value || 0).toFixed(2).replace('.', ',') %></div>
+              <div class="muted"><%= item.total_items || 0 %> retirada(s)</div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+
+    <div class="card">
+      <h2>Produtos cadastrados</h2>
+      <div class="grid">
+        <% products.forEach(item => { %>
+          <div class="info">
+            <span class="pill">Produto</span>
+
+            <% if (item.image_url) { %>
+              <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
+            <% } %>
+
+            <h3 style="margin:10px 0 0;"><%= item.name %></h3>
+            <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
+
+            <% const estoque = Number(item.stock_quantity || 0); %>
+            <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
+              Estoque atual: <%= estoque %>
+            </div>
+
+            <% if (user.role === 'admin') { %>
+              <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
+                <div class="form-row">
+                  <div><input type="text" name="name" value="<%= item.name %>" required /></div>
+                  <div><input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required /></div>
+                  <div><input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" /></div>
+                  <div><input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" /></div>
+                </div>
+
+                <div class="actions" style="margin-top:10px;">
+                  <button type="submit">Salvar</button>
+                </div>
+              </form>
+
+              <form method="POST" action="/admin/products/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este produto?');" style="margin-top:10px;">
+                <button type="submit" class="btn-danger">Excluir produto</button>
+              </form>
+            <% } %>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+
+    <% if (user.role === 'employee') { %>
+      <div class="card">
+        <h2>Registrar retirada</h2>
+        <form method="POST" action="/withdraw">
+          <div class="form-row">
+            <div>
+              <label>Escolha o item</label><br /><br />
+              <select name="item_id" required>
+                <% products.forEach(item => { %>
+                  <option value="<%= item.id %>" <%= Number(item.stock_quantity || 0) <= 0 ? 'disabled' : '' %>>
+                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %> | Estoque: <%= item.stock_quantity %>
+                    <%= Number(item.stock_quantity || 0) <= 0 ? ' | SEM ESTOQUE' : '' %>
+                  </option>
+                <% }) %>
+              </select>
+            </div>
+
+            <div style="max-width:220px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit">Marcar retirada</button>
+            </div>
+
+            <div style="max-width:220px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="button" class="btn-pix" onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')">
+                Pagar com Pix
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Minhas retiradas</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Item</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% withdrawals.forEach(item => { %>
+              <tr>
+                <td><%= dayjs(item.created_at).format('DD/MM/YYYY HH:mm:ss') %></td>
+                <td><%= item.item_name %></td>
+                <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
+    <% if (user.role === 'admin') { %>
+      <div class="card">
+        <h2>Cadastrar usuário</h2>
+        <form method="POST" action="/admin/users">
+          <div class="form-row">
+            <div><label>Nome completo</label><br /><br /><input type="text" name="name" placeholder="Nome completo" required /></div>
+            <div><label>Usuário</label><br /><br /><input type="text" name="username" placeholder="usuario" required /></div>
+            <div><label>Senha</label><br /><br /><input type="password" name="password" placeholder="Senha" required /></div>
+            <div>
+              <label>Perfil</label><br /><br />
+              <select name="role" required>
+                <option value="employee">Colaborador</option>
+                <option value="finance">Financeiro</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div style="max-width:220px;"><label>&nbsp;</label><br /><br /><button type="submit">Cadastrar usuário</button></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Usuários cadastrados</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Usuário</th>
+              <th>Perfil</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% users.forEach(item => { %>
+              <tr>
+                <td><%= item.name %></td>
+                <td><%= item.username %></td>
+                <td><%= item.role %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h2>Cadastrar produto</h2>
+        <form method="POST" action="/admin/products">
+          <div class="form-row">
+            <div><label>Nome do produto</label><br /><br /><input type="text" name="name" placeholder="Ex.: Coca-Cola 350ml" required /></div>
+            <div><label>Preço</label><br /><br /><input type="number" step="0.01" min="0" name="price" placeholder="0.00" required /></div>
+            <div><label>URL/caminho da imagem</label><br /><br /><input type="text" name="image_url" placeholder="/produtos/coca-350ml.jpg" /></div>
+            <div><label>Estoque inicial</label><br /><br /><input type="number" min="0" name="stock_quantity" placeholder="0" /></div>
+            <div style="max-width:220px;"><label>&nbsp;</label><br /><br /><button type="submit">Cadastrar produto</button></div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Entrada de estoque</h2>
+        <form method="POST" action="/admin/stock/add">
+          <div class="form-row">
+            <div>
+              <label>Produto</label><br /><br />
+              <select name="product_id" required>
+                <% products.forEach(item => { %>
+                  <option value="<%= item.id %>"><%= item.name %> | Estoque atual: <%= item.stock_quantity %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div>
+              <label>Quantidade recebida</label><br /><br />
+              <input type="number" min="1" name="quantity" placeholder="0" required />
+            </div>
+            <div style="max-width:220px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit">Adicionar estoque</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    <% } %>
+
+    <% if (user.role === 'admin' || user.role === 'finance') { %>
+      <div class="card">
+        <h2>Relatórios</h2>
+        <form method="GET" action="/reports/xlsx">
+          <div class="form-row">
+            <div>
+              <label>Mês</label><br /><br />
+              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+            </div>
+            <div style="max-width:240px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit">Baixar Excel</button>
+            </div>
+          </div>
+        </form>
+
+        <form method="GET" action="/reports/pdf" style="margin-top:14px;">
+          <div class="form-row">
+            <div>
+              <label>Mês</label><br /><br />
+              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+            </div>
+            <div style="max-width:240px;">
+              <label>&nbsp;</label><br /><br />
+              <button type="submit" class="btn-soft">Baixar PDF</button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Lançamentos recentes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Colaborador</th>
+              <th>Usuário</th>
+              <th>Item</th>
+              <th>Valor</th>
+              <% if (user.role === 'admin') { %><th>Ação</th><% } %>
+            </tr>
+          </thead>
+          <tbody>
+            <% withdrawalsAll.forEach(item => { %>
+              <tr>
+                <td><%= dayjs(item.created_at).format('DD/MM/YYYY HH:mm:ss') %></td>
+                <td><%= item.name %></td>
+                <td><%= item.username %></td>
+                <td><%= item.item_name %></td>
+                <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+                <% if (user.role === 'admin') { %>
+                  <td>
+                    <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
+                      <button type="submit" class="btn-danger">Excluir</button>
+                    </form>
+                  </td>
+                <% } %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</body>
+</html>
+`
+};
+
+for (const [fileName, content] of Object.entries(templates)) {
+  fs.writeFileSync(path.join(viewsDir, fileName), content, 'utf8');
+}
+
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS products (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      price NUMERIC(10,2) NOT NULL,
+      image_url TEXT,
+      stock_quantity INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS withdrawals (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      item_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+      item_name TEXT NOT NULL,
+      item_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  const adminPasswordHash = bcrypt.hashSync('123456', 10);
+  const financePasswordHash = bcrypt.hashSync('123456', 10);
+
+  await pool.query(
+    `
+    INSERT INTO users (name, username, password_hash, role)
+    VALUES ('Administrador', 'admin', $1, 'admin')
+    ON CONFLICT (username) DO NOTHING
+    `,
+    [adminPasswordHash]
+  );
+
+  await pool.query(
+    `
+    INSERT INTO users (name, username, password_hash, role)
+    VALUES ('Financeiro', 'financeiro', $1, 'finance')
+    ON CONFLICT (username) DO NOTHING
+    `,
+    [financePasswordHash]
+  );
+}
+
+const adminPasswordHash = bcrypt.hashSync('123456', 10);
+const financePasswordHash = bcrypt.hashSync('123456', 10);
+
+await pool.query(
+  `
+  INSERT INTO users (name, username, password_hash, role)
+  VALUES ('Administrador', 'admin', $1, 'admin')
+  ON CONFLICT (username) DO NOTHING
+  `,
+  [adminPasswordHash]
+);
+
+await pool.query(
+  `
+  INSERT INTO users (name, username, password_hash, role)
+  VALUES ('Financeiro', 'financeiro', $1, 'finance')
+  ON CONFLICT (username) DO NOTHING
+  `,
+  [financePasswordHash]
+);
+
+/* FORÇA atualizar a senha dos dois usuários */
+await pool.query(
+  `UPDATE users SET password_hash = $1, role = 'admin', name = 'Administrador' WHERE username = 'admin'`,
+  [adminPasswordHash]
+);
+
+await pool.query(
+  `UPDATE users SET password_hash = $1, role = 'finance', name = 'Financeiro' WHERE username = 'financeiro'`,
+  [financePasswordHash]
+);
+
+function requireAuth(req, res, next) {
+  if (!req.session.user) return res.redirect('/');
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.session.user || req.session.user.role !== 'admin') {
+    return res.status(403).send('Acesso restrito ao administrador.');
+  }
+  next();
+}
+
+function requireFinanceOrAdmin(req, res, next) {
+  if (!req.session.user || !['finance', 'admin'].includes(req.session.user.role)) {
+    return res.status(403).send('Acesso restrito.');
+  }
+  next();
+}
+
+app.get('/', (req, res) => {
+  res.render('login', { error: null });
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM users WHERE username = $1`,
+      [username]
+    );
+
+    const user = result.rows[0];
+
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.render('login', { error: 'Usuário ou senha inválidos.' });
+    }
+
+    req.session.user = {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+    };
+
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    res.render('login', { error: 'Erro interno ao tentar entrar.' });
+  }
+});
+
+app.get('/register', (req, res) => {
+  res.render('register', { success: null, error: null });
+});
+
+app.post('/register', async (req, res) => {
+  const { name, username, password } = req.body;
+
+  if (!name || !username || !password) {
+    return res.render('register', {
+      success: null,
+      error: 'Preencha todos os campos.'
+    });
+  }
+
+  try {
+    const passwordHash = bcrypt.hashSync(password, 10);
+
+    await pool.query(
+      `INSERT INTO users (name, username, password_hash, role)
+       VALUES ($1, $2, $3, 'employee')`,
+      [name.trim(), username.trim(), passwordHash]
+    );
+
+    res.render('register', {
+      success: 'Usuário criado com sucesso. Agora você já pode entrar no sistema.',
+      error: null
+    });
+  } catch (err) {
+    console.error(err);
+    res.render('register', {
+      success: null,
+      error: 'Não foi possível criar o usuário. Esse login pode já existir.'
+    });
+  }
+});
+
+app.get('/dashboard', requireAuth, async (req, res) => {
+  const user = req.session.user;
+  const message = req.session.message || null;
+  req.session.message = null;
+
+  try {
+    const productsResult = await pool.query(`
+      SELECT id, name, price, image_url, stock_quantity
+      FROM products
+      ORDER BY name ASC
+    `);
+
+    const products = productsResult.rows;
+
+    if (user.role === 'employee') {
+      const withdrawalsResult = await pool.query(
+        `SELECT id, item_name, item_price, created_at
+         FROM withdrawals
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [user.id]
+      );
+
+      return res.render('dashboard', {
+        user,
+        products,
+        withdrawals: withdrawalsResult.rows,
+        withdrawalsAll: [],
+        summaryByUser: [],
+        users: [],
+        message,
+        dayjs
+      });
+    }
+
+    const withdrawalsAllResult = await pool.query(`
+      SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
+      FROM withdrawals w
+      INNER JOIN users u ON u.id = w.user_id
+      ORDER BY w.created_at DESC
+      LIMIT 100
+    `);
+
+    const summaryByUserResult = await pool.query(`
+      SELECT
+        u.name,
+        COUNT(w.id) AS total_items,
+        COALESCE(SUM(w.item_price), 0) AS total_value
+      FROM users u
+      LEFT JOIN withdrawals w ON w.user_id = u.id
+      WHERE u.role = 'employee'
+      GROUP BY u.id, u.name
+      ORDER BY total_value DESC, total_items DESC, u.name ASC
+    `);
+
+    let users = [];
+    if (user.role === 'admin') {
+      const usersResult = await pool.query(`
+        SELECT id, name, username, role
+        FROM users
+        ORDER BY role ASC, name ASC
+      `);
+      users = usersResult.rows;
+    }
+
+    return res.render('dashboard', {
+      user,
+      products,
+      withdrawals: [],
+      withdrawalsAll: withdrawalsAllResult.rows,
+      summaryByUser: summaryByUserResult.rows,
+      users,
+      message,
+      dayjs
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Erro ao carregar dashboard.');
+  }
+});
+
+app.post('/withdraw', requireAuth, async (req, res) => {
+  const user = req.session.user;
+
+  if (user.role !== 'employee') {
+    return res.status(403).send('Somente colaboradores podem registrar retiradas.');
+  }
+
+  const { item_id } = req.body;
+
+  try {
+    const productResult = await pool.query(
+      `SELECT * FROM products WHERE id = $1`,
+      [item_id]
+    );
+
+    const product = productResult.rows[0];
+
+    if (!product) {
+      req.session.message = 'Produto não encontrado.';
+      return res.redirect('/dashboard');
+    }
+
+    if (Number(product.stock_quantity) <= 0) {
+      req.session.message = 'Este produto está sem estoque.';
+      return res.redirect('/dashboard');
+    }
+
+    await pool.query('BEGIN');
+
+    await pool.query(
+      `
+      INSERT INTO withdrawals (user_id, item_id, item_name, item_price)
+      VALUES ($1, $2, $3, $4)
+      `,
+      [user.id, product.id, product.name, product.price]
+    );
+
+    await pool.query(
+      `
+      UPDATE products
+      SET stock_quantity = stock_quantity - 1
+      WHERE id = $1
+      `,
+      [product.id]
+    );
+
+    await pool.query('COMMIT');
+
+    req.session.message = `Retirada registrada com sucesso: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
+    res.redirect('/dashboard');
+  } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    req.session.message = 'Erro ao registrar retirada.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/users', requireAdmin, async (req, res) => {
+  const { name, username, password, role } = req.body;
+
+  if (!name || !username || !password || !role) {
+    req.session.message = 'Preencha todos os campos do usuário.';
+    return res.redirect('/dashboard');
+  }
+
+  if (!['admin', 'finance', 'employee'].includes(role)) {
+    req.session.message = 'Perfil inválido.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    const passwordHash = bcrypt.hashSync(password, 10);
+
+    await pool.query(
+      `INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, $4)`,
+      [name.trim(), username.trim(), passwordHash, role]
+    );
+
+    req.session.message = 'Usuário cadastrado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Não foi possível cadastrar o usuário.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/products', requireAdmin, async (req, res) => {
+  const { name, price, image_url, stock_quantity } = req.body;
+
+  if (!name || price === undefined || price === '') {
+    req.session.message = 'Preencha nome e preço do produto.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)`,
+      [
+        name.trim(),
+        Number(price),
+        image_url ? image_url.trim() : '',
+        Number(stock_quantity || 0),
+      ]
+    );
+
+    req.session.message = 'Produto cadastrado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Não foi possível cadastrar o produto.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/products/:id/update', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { name, price, image_url, stock_quantity } = req.body;
+
+  if (!name || price === undefined || price === '') {
+    req.session.message = 'Preencha nome e preço para atualizar.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    await pool.query(
+      `
+      UPDATE products
+      SET name = $1, price = $2, image_url = $3, stock_quantity = $4
+      WHERE id = $5
+      `,
+      [
+        name.trim(),
+        Number(price),
+        image_url ? image_url.trim() : '',
+        Number(stock_quantity || 0),
+        id,
+      ]
+    );
+
+    req.session.message = 'Produto atualizado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao atualizar produto.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = $1`,
+      [id]
+    );
+
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    if (total > 0) {
+      req.session.message = 'Não é possível excluir um produto que já possui lançamentos.';
+      return res.redirect('/dashboard');
+    }
+
+    await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
+
+    req.session.message = 'Produto excluído com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao excluir produto.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/stock/add', requireAdmin, async (req, res) => {
+  const { product_id, quantity } = req.body;
+
+  if (!product_id || !quantity || Number(quantity) <= 0) {
+    req.session.message = 'Informe um produto e uma quantidade válida.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    await pool.query(
+      `
+      UPDATE products
+      SET stock_quantity = stock_quantity + $1
+      WHERE id = $2
+      `,
+      [Number(quantity), product_id]
+    );
+
+    req.session.message = 'Estoque atualizado com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao atualizar estoque.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await pool.query(`DELETE FROM withdrawals WHERE id = $1`, [id]);
+
+    req.session.message = 'Lançamento excluído com sucesso.';
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao excluir lançamento.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
+  const { month } = req.query;
+
+  if (!month || !/^\\d{4}-\\d{2}$/.test(month)) {
+    return res.status(400).send('Informe o mês no formato YYYY-MM.');
+  }
+
+  const start = `${month}-01`;
+  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD');
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        u.name AS "Colaborador",
+        u.username AS "Usuario",
+        w.item_name AS "Item",
+        w.item_price AS "Valor",
+        TO_CHAR(w.created_at, 'DD/MM/YYYY HH24:MI:SS') AS "DataHora"
+      FROM withdrawals w
+      INNER JOIN users u ON u.id = w.user_id
+      WHERE w.created_at >= $1 AND w.created_at < $2
+      ORDER BY u.name ASC, w.created_at ASC
+      `,
+      [start, end]
+    );
+
+    const rows = result.rows;
+
+    const resumoPorPessoa = {};
+    for (const row of rows) {
+      if (!resumoPorPessoa[row.Colaborador]) {
+        resumoPorPessoa[row.Colaborador] = { total: 0, valor: 0 };
+      }
+      resumoPorPessoa[row.Colaborador].total += 1;
+      resumoPorPessoa[row.Colaborador].valor += Number(row.Valor || 0);
+    }
+
+    const resumoSheet = Object.entries(resumoPorPessoa).map(([colaborador, dados]) => ({
+      Colaborador: colaborador,
+      TotalRetiradas: dados.total,
+      TotalEmReais: Number(dados.valor.toFixed(2)),
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const detalheWs = XLSX.utils.json_to_sheet(rows);
+    const resumoWs = XLSX.utils.json_to_sheet(resumoSheet);
+
+    XLSX.utils.book_append_sheet(workbook, detalheWs, 'Detalhado');
+    XLSX.utils.book_append_sheet(workbook, resumoWs, 'Resumo');
+
+    const fileName = `relatorio-bebidas-${month}.xlsx`;
+    const filePath = path.join(baseDir, fileName);
+
+    XLSX.writeFile(workbook, filePath);
+
+    res.download(filePath, fileName, (downloadErr) => {
+      if (downloadErr) console.error(downloadErr);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao gerar relatório.');
+  }
+});
+
+app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
+  const { month } = req.query;
+
+  if (!month || !/^\\d{4}-\\d{2}$/.test(month)) {
+    return res.status(400).send('Informe o mês no formato YYYY-MM.');
+  }
+
+  const start = `${month}-01`;
+  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD');
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        u.name AS "Colaborador",
+        u.username AS "Usuario",
+        w.item_name AS "Item",
+        w.item_price AS "Valor",
+        w.created_at AS "DataHora"
+      FROM withdrawals w
+      INNER JOIN users u ON u.id = w.user_id
+      WHERE w.created_at >= $1 AND w.created_at < $2
+      ORDER BY u.name ASC, w.created_at ASC
+      `,
+      [start, end]
+    );
+
+    const rows = result.rows;
+
+    const fileName = `relatorio-bebidas-${month}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    doc.pipe(res);
+
+    const logoPath = path.join(publicDir, 'logo-empresa.jpg');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 40, 30, { fit: [60, 60] });
+    }
+
+    doc.fontSize(18).text('Relatório Mensal de Bebidas', 120, 40);
+    doc.fontSize(12).text(`Mês: ${month}`, 120, 65);
+    doc.moveDown(3);
+
+    let totalGeral = 0;
+
+    rows.forEach((row, index) => {
+      totalGeral += Number(row.Valor || 0);
+      doc.fontSize(10).text(
+        `${index + 1}. ${dayjs(row.DataHora).format('DD/MM/YYYY HH:mm:ss')} | ${row.Colaborador} | ${row.Usuario} | ${row.Item} | R$ ${Number(row.Valor).toFixed(2).replace('.', ',')}`
+      );
+    });
+
+    doc.moveDown();
+    doc.fontSize(12).text(`Total de lançamentos: ${rows.length}`);
+    doc.fontSize(12).text(`Total em reais: R$ ${totalGeral.toFixed(2).replace('.', ',')}`);
+    doc.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao gerar PDF.');
+  }
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
+});
+
+initDB()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Erro ao inicializar banco:', err);
+  });
