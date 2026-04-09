@@ -265,6 +265,11 @@ const templates = {
       --accent2:#5a8dff;
       --danger:#ff8a97;
       --success:#25c18c;
+      --successBg:rgba(37,193,140,.15);
+      --warningBg:rgba(255,193,7,.16);
+      --warningBorder:rgba(255,193,7,.28);
+      --dangerBg:rgba(255,107,132,.14);
+      --dangerBorder:rgba(255,107,132,.22);
     }
     * { box-sizing:border-box; }
     body {
@@ -379,6 +384,27 @@ const templates = {
       display:block;
       margin:12px 0;
     }
+    .stock-box {
+      margin-top:12px;
+      padding:10px 14px;
+      border-radius:12px;
+      font-weight:700;
+    }
+    .stock-ok {
+      background:var(--successBg);
+      border:1px solid rgba(37,193,140,.25);
+      color:#defff2;
+    }
+    .stock-low {
+      background:var(--warningBg);
+      border:1px solid var(--warningBorder);
+      color:#ffe9a6;
+    }
+    .stock-zero {
+      background:var(--dangerBg);
+      border:1px solid var(--dangerBorder);
+      color:#ffd8dd;
+    }
     .form-row {
       display:flex;
       gap:10px;
@@ -407,6 +433,12 @@ const templates = {
       vertical-align:top;
     }
     a { text-decoration:none; color:inherit; }
+
+    @media (max-width: 768px) {
+      .price, .value {
+        font-size:22px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -457,18 +489,28 @@ const templates = {
             <h3 style="margin:10px 0 0;"><%= item.name %></h3>
             <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
 
-            <% if (item.stock_quantity !== null && item.stock_quantity !== undefined) { %>
-              <div class="muted" style="margin-top:8px;">Estoque atual: <strong><%= item.stock_quantity %></strong></div>
-            <% } %>
+            <% const estoque = Number(item.stock_quantity || 0); %>
+            <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
+              Estoque atual: <%= estoque %>
+            </div>
 
             <% if (user.role === 'admin') { %>
               <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
                 <div class="form-row">
-                  <div><input type="text" name="name" value="<%= item.name %>" required /></div>
-                  <div><input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required /></div>
-                  <div><input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" /></div>
-                  <div><input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" /></div>
+                  <div>
+                    <input type="text" name="name" value="<%= item.name %>" required />
+                  </div>
+                  <div>
+                    <input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required />
+                  </div>
+                  <div>
+                    <input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" />
+                  </div>
+                  <div>
+                    <input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" />
+                  </div>
                 </div>
+
                 <div class="actions" style="margin-top:10px;">
                   <button type="submit">Salvar</button>
                 </div>
@@ -492,22 +534,28 @@ const templates = {
               <label>Escolha o item</label><br /><br />
               <select name="item_id" required>
                 <% products.forEach(item => { %>
-                  <option value="<%= item.id %>">
-                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %>
-                    <% if (item.stock_quantity !== null && item.stock_quantity !== undefined) { %>
-                      | Estoque: <%= item.stock_quantity %>
-                    <% } %>
+                  <option value="<%= item.id %>" <%= Number(item.stock_quantity || 0) <= 0 ? 'disabled' : '' %>>
+                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %> | Estoque: <%= item.stock_quantity %>
+                    <%= Number(item.stock_quantity || 0) <= 0 ? ' | SEM ESTOQUE' : '' %>
                   </option>
                 <% }) %>
               </select>
             </div>
+
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
               <button type="submit">Marcar retirada</button>
             </div>
+
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
-              <button type="button" class="btn-pix" onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')">Pagar com Pix</button>
+              <button
+                type="button"
+                class="btn-pix"
+                onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')"
+              >
+                Pagar com Pix
+              </button>
             </div>
           </div>
         </form>
@@ -627,7 +675,9 @@ const templates = {
               <label>Produto</label><br /><br />
               <select name="product_id" required>
                 <% products.forEach(item => { %>
-                  <option value="<%= item.id %>"><%= item.name %></option>
+                  <option value="<%= item.id %>">
+                    <%= item.name %> | Estoque atual: <%= item.stock_quantity %>
+                  </option>
                 <% }) %>
               </select>
             </div>
