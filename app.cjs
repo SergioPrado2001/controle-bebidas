@@ -659,7 +659,9 @@ const templates = {
           </div>
         </form>
       </div>
+    <% } %>
 
+    <% if (user.role === 'admin' || user.role === 'finance') { %>
       <div class="card">
         <h2>Entrada de estoque</h2>
         <form method="POST" action="/admin/stock/add">
@@ -1430,7 +1432,7 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/admin/stock/add', requireAdmin, async (req, res) => {
+app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
   const { product_id, quantity, total_cost } = req.body;
 
   if (!product_id || !quantity || Number(quantity) <= 0) {
