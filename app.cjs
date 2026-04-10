@@ -928,7 +928,6 @@ const templates = {
     <% } %>
   </div>
 
-  <!-- Script do carrinho (para todos os usuários) -->
   <script>
     // ===== SISTEMA DE CARRINHO =====
     var cart = {};
