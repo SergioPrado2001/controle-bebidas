@@ -608,8 +608,9 @@ const templates = {
             <tr>
               <th>Nome</th>
               <th>CPF</th>
-              <th>Usuário</th>
+              <th>Usu\u00e1rio</th>
               <th>Perfil</th>
+              <th>A\u00e7\u00e3o</th>
             </tr>
           </thead>
           <tbody>
@@ -619,6 +620,15 @@ const templates = {
                 <td><%= item.cpf || '-' %></td>
                 <td><%= item.username %></td>
                 <td><%= item.role %></td>
+                <td>
+                  <% if (item.username !== 'admin' && item.username !== 'financeiro') { %>
+                    <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usu\u00e1rio ' + '<%= item.name %>' + '? Todos os lan\u00e7amentos dele ser\u00e3o removidos.')" style="margin:0;">
+                      <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
+                    </form>
+                  <% } else { %>
+                    -
+                  <% } %>
+                </td>
               </tr>
             <% }) %>
           </tbody>
@@ -1189,6 +1199,36 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
       return res.redirect('/dashboard');
     }
     req.session.message = 'Não foi possível cadastrar o usuário.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/users/:id/delete', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Verificar se o usu\u00e1rio existe e n\u00e3o \u00e9 admin/financeiro fixo
+    const userResult = await pool.query('SELECT username, name FROM users WHERE id = $1', [id]);
+    const targetUser = userResult.rows[0];
+
+    if (!targetUser) {
+      req.session.message = 'Usu\u00e1rio n\u00e3o encontrado.';
+      return res.redirect('/dashboard');
+    }
+
+    if (targetUser.username === 'admin' || targetUser.username === 'financeiro') {
+      req.session.message = 'N\u00e3o \u00e9 poss\u00edvel excluir usu\u00e1rios fixos do sistema.';
+      return res.redirect('/dashboard');
+    }
+
+    // Excluir usu\u00e1rio (withdrawals ser\u00e3o removidos por CASCADE)
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+
+    req.session.message = `Usu\u00e1rio "${targetUser.name}" exclu\u00eddo com sucesso.`;
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao excluir usu\u00e1rio.';
     res.redirect('/dashboard');
   }
 });
