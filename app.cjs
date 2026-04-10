@@ -508,10 +508,12 @@ const templates = {
             <h3 style="margin:10px 0 0;"><%= item.name %></h3>
             <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
 
-            <% const estoque = Number(item.stock_quantity || 0); %>
-            <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
-              Estoque atual: <%= estoque %>
-            </div>
+            <% if (user.role === 'admin' || user.role === 'finance') { %>
+              <% const estoque = Number(item.stock_quantity || 0); %>
+              <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
+                Estoque atual: <%= estoque %>
+              </div>
+            <% } %>
 
             <% if (user.role === 'admin') { %>
               <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
@@ -546,8 +548,8 @@ const templates = {
               <select name="item_id" required>
                 <% products.forEach(item => { %>
                   <option value="<%= item.id %>" <%= Number(item.stock_quantity || 0) <= 0 ? 'disabled' : '' %>>
-                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %> | Estoque: <%= item.stock_quantity %>
-                    <%= Number(item.stock_quantity || 0) <= 0 ? ' | SEM ESTOQUE' : '' %>
+                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %>
+                    <%= Number(item.stock_quantity || 0) <= 0 ? ' | INDISPON\u00cdVEL' : '' %>
                   </option>
                 <% }) %>
               </select>
