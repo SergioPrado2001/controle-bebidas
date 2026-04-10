@@ -664,8 +664,12 @@ const templates = {
         <form method="GET" action="/reports/xlsx">
           <div class="form-row">
             <div>
-              <label>Mês</label><br /><br />
-              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+              <label>Data início</label><br /><br />
+              <input type="date" name="start" value="<%= new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10) %>" required />
+            </div>
+            <div>
+              <label>Data fim</label><br /><br />
+              <input type="date" name="end" value="<%= new Date().toISOString().slice(0,10) %>" required />
             </div>
             <div style="max-width:240px;">
               <label>&nbsp;</label><br /><br />
@@ -677,8 +681,12 @@ const templates = {
         <form method="GET" action="/reports/pdf" style="margin-top:14px;">
           <div class="form-row">
             <div>
-              <label>Mês</label><br /><br />
-              <input type="month" name="month" value="<%= new Date().toISOString().slice(0,7) %>" required />
+              <label>Data início</label><br /><br />
+              <input type="date" name="start" value="<%= new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10) %>" required />
+            </div>
+            <div>
+              <label>Data fim</label><br /><br />
+              <input type="date" name="end" value="<%= new Date().toISOString().slice(0,10) %>" required />
             </div>
             <div style="max-width:240px;">
               <label>&nbsp;</label><br /><br />
@@ -1313,14 +1321,20 @@ app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
 });
 
 app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
-  const { month } = req.query;
+  const { start, end } = req.query;
 
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    return res.status(400).send('Informe o mês no formato YYYY-MM.');
+  if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
   }
 
-  const start = `${month}-01`;
-  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD');
+  if (dayjs(end).isBefore(dayjs(start))) {
+    return res.status(400).send('A data fim não pode ser anterior à data de início.');
+  }
+
+  // Incluir o dia final inteiro (até 23:59:59)
+  const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
+
+  const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
 
   try {
     const result = await pool.query(
@@ -1336,7 +1350,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       WHERE w.created_at >= $1 AND w.created_at < $2
       ORDER BY u.name ASC, w.created_at ASC
       `,
-      [start, end]
+      [start, endPlusOne]
     );
 
     const rows = result.rows;
@@ -1377,13 +1391,13 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       { Descricao: 'Total de Pedidos', Valor: totalGeralPedidos },
       { Descricao: 'Total de Colaboradores', Valor: Object.keys(resumoPorPessoa).length },
       { Descricao: 'Valor Total em R$', Valor: Number(totalGeralValor.toFixed(2)) },
-      { Descricao: 'Mes de Referencia', Valor: month },
+      { Descricao: 'Periodo', Valor: `${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}` },
     ];
 
     const totalGeralWs = XLSX.utils.json_to_sheet(totalGeralSheet);
     XLSX.utils.book_append_sheet(workbook, totalGeralWs, 'Total Geral');
 
-    const fileName = `relatorio-bebidas-${month}.xlsx`;
+    const fileName = `relatorio-bebidas-${periodoLabel}.xlsx`;
     const filePath = path.join(baseDir, fileName);
 
     XLSX.writeFile(workbook, filePath);
@@ -1399,14 +1413,20 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
 });
 
 app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
-  const { month } = req.query;
+  const { start, end } = req.query;
 
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    return res.status(400).send('Informe o mês no formato YYYY-MM.');
+  if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
   }
 
-  const start = `${month}-01`;
-  const end = dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM-DD');
+  if (dayjs(end).isBefore(dayjs(start))) {
+    return res.status(400).send('A data fim não pode ser anterior à data de início.');
+  }
+
+  // Incluir o dia final inteiro (até 23:59:59)
+  const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
+
+  const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
 
   try {
     const result = await pool.query(
@@ -1422,12 +1442,12 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
       WHERE w.created_at >= $1 AND w.created_at < $2
       ORDER BY u.name ASC, w.created_at ASC
       `,
-      [start, end]
+      [start, endPlusOne]
     );
 
     const rows = result.rows;
 
-    const fileName = `relatorio-bebidas-${month}.pdf`;
+    const fileName = `relatorio-bebidas-${periodoLabel}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
@@ -1439,8 +1459,8 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
       doc.image(logoPath, 40, 30, { fit: [60, 60] });
     }
 
-    doc.fontSize(18).text('Relatório Mensal de Bebidas', 120, 40);
-    doc.fontSize(12).text(`Mês: ${month}`, 120, 65);
+    doc.fontSize(18).text('Relatório de Bebidas', 120, 40);
+    doc.fontSize(12).text(`Período: ${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}`, 120, 65);
     doc.moveDown(3);
 
     let totalGeral = 0;
