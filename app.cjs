@@ -655,8 +655,8 @@ const templates = {
               <input type="number" min="1" name="quantity" placeholder="0" required />
             </div>
             <div>
-              <label>Custo unit\u00e1rio (R$)</label><br /><br />
-              <input type="number" step="0.01" min="0" name="unit_cost" placeholder="0.00" required />
+              <label>Custo total da entrega (R$)</label><br /><br />
+              <input type="number" step="0.01" min="0" name="total_cost" placeholder="Ex: 150.00" required />
             </div>
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
@@ -1283,7 +1283,7 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
 });
 
 app.post('/admin/stock/add', requireAdmin, async (req, res) => {
-  const { product_id, quantity, unit_cost } = req.body;
+  const { product_id, quantity, total_cost } = req.body;
 
   if (!product_id || !quantity || Number(quantity) <= 0) {
     req.session.message = 'Informe um produto e uma quantidade v\u00e1lida.';
@@ -1291,8 +1291,8 @@ app.post('/admin/stock/add', requireAdmin, async (req, res) => {
   }
 
   const qty = Number(quantity);
-  const cost = Number(unit_cost || 0);
-  const totalCost = qty * cost;
+  const totalCost = Number(total_cost || 0);
+  const cost = qty > 0 ? totalCost / qty : 0;
 
   try {
     // Buscar nome do produto
