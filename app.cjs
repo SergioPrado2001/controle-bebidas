@@ -654,6 +654,10 @@ const templates = {
               <label>Quantidade recebida</label><br /><br />
               <input type="number" min="1" name="quantity" placeholder="0" required />
             </div>
+            <div>
+              <label>Custo unit\u00e1rio (R$)</label><br /><br />
+              <input type="number" step="0.01" min="0" name="unit_cost" placeholder="0.00" required />
+            </div>
             <div style="max-width:220px;">
               <label>&nbsp;</label><br /><br />
               <button type="submit">Adicionar estoque</button>
@@ -783,6 +787,18 @@ async function initDB() {
       item_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
       item_name TEXT NOT NULL,
       item_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stock_entries (
+      id SERIAL PRIMARY KEY,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      product_name TEXT NOT NULL,
+      quantity INTEGER NOT NULL,
+      unit_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
+      total_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
   `);
@@ -1267,26 +1283,43 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
 });
 
 app.post('/admin/stock/add', requireAdmin, async (req, res) => {
-  const { product_id, quantity } = req.body;
+  const { product_id, quantity, unit_cost } = req.body;
 
   if (!product_id || !quantity || Number(quantity) <= 0) {
-    req.session.message = 'Informe um produto e uma quantidade válida.';
+    req.session.message = 'Informe um produto e uma quantidade v\u00e1lida.';
     return res.redirect('/dashboard');
   }
 
+  const qty = Number(quantity);
+  const cost = Number(unit_cost || 0);
+  const totalCost = qty * cost;
+
   try {
+    // Buscar nome do produto
+    const prodResult = await pool.query('SELECT name FROM products WHERE id = $1', [product_id]);
+    const prodName = prodResult.rows[0] ? prodResult.rows[0].name : 'Desconhecido';
+
+    await pool.query('BEGIN');
+
+    // Atualizar estoque do produto
     await pool.query(
-      `
-      UPDATE products
-      SET stock_quantity = stock_quantity + $1
-      WHERE id = $2
-      `,
-      [Number(quantity), product_id]
+      `UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2`,
+      [qty, product_id]
     );
 
-    req.session.message = 'Estoque atualizado com sucesso.';
+    // Registrar entrada no hist\u00f3rico
+    await pool.query(
+      `INSERT INTO stock_entries (product_id, product_name, quantity, unit_cost, total_cost)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [product_id, prodName, qty, cost, totalCost]
+    );
+
+    await pool.query('COMMIT');
+
+    req.session.message = `Estoque atualizado: +${qty} ${prodName} (Custo: R$ ${totalCost.toFixed(2).replace('.', ',')})`;
     res.redirect('/dashboard');
   } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
     console.error(err);
     req.session.message = 'Erro ao atualizar estoque.';
     res.redirect('/dashboard');
@@ -1312,76 +1345,78 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   const { start, end } = req.query;
 
   if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-    return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
+    return res.status(400).send('Informe a data de in\u00edcio e fim no formato YYYY-MM-DD.');
   }
 
   if (dayjs(end).isBefore(dayjs(start))) {
-    return res.status(400).send('A data fim não pode ser anterior à data de início.');
+    return res.status(400).send('A data fim n\u00e3o pode ser anterior \u00e0 data de in\u00edcio.');
   }
 
   const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
   const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
-  const periodoTitulo = `${dayjs(start).format('MM/YYYY')}`;
+  const periodoTitulo = `${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}`;
 
   try {
-    // Buscar todos os pedidos do período
+    // Buscar todos os pedidos do per\u00edodo
     const result = await pool.query(
-      `
-      SELECT
-        u.name AS "Colaborador",
-        u.username AS "Usuario",
-        w.item_name AS "Item",
-        w.item_price AS "Valor"
-      FROM withdrawals w
-      INNER JOIN users u ON u.id = w.user_id
-      WHERE w.created_at >= $1 AND w.created_at < $2
-      ORDER BY u.name ASC
-      `,
+      `SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor"
+       FROM withdrawals w INNER JOIN users u ON u.id = w.user_id
+       WHERE w.created_at >= $1 AND w.created_at < $2
+       ORDER BY u.name ASC`,
       [start, endPlusOne]
     );
-
     const rows = result.rows;
 
-    // Descobrir todos os produtos distintos e seus preços unitários
+    // Buscar entradas de estoque do per\u00edodo
+    const stockResult = await pool.query(
+      `SELECT product_name, SUM(quantity) AS total_entrada, SUM(total_cost) AS custo_total
+       FROM stock_entries
+       WHERE created_at >= $1 AND created_at < $2
+       GROUP BY product_name ORDER BY product_name ASC`,
+      [start, endPlusOne]
+    );
+    const stockRows = stockResult.rows;
+
+    // Buscar pre\u00e7os de venda dos produtos
+    const allProducts = await pool.query('SELECT name, price FROM products ORDER BY name ASC');
+    const precosVenda = {};
+    for (const p of allProducts.rows) {
+      precosVenda[p.name] = Number(p.price);
+    }
+
+    // Descobrir todos os produtos distintos e seus pre\u00e7os unit\u00e1rios
     const produtosMap = {};
     for (const row of rows) {
-      if (!produtosMap[row.Item]) {
-        produtosMap[row.Item] = Number(row.Valor || 0);
-      }
+      if (!produtosMap[row.Item]) produtosMap[row.Item] = Number(row.Valor || 0);
     }
     const produtos = Object.keys(produtosMap).sort();
     const precos = produtos.map(p => produtosMap[p]);
+    const numProdutos = produtos.length;
 
-    // Agrupar por pessoa: { nome: { usuario, produtos: { item: qtd } } }
+    // Agrupar por pessoa
     const pessoas = {};
     for (const row of rows) {
-      if (!pessoas[row.Colaborador]) {
-        pessoas[row.Colaborador] = { usuario: row.Usuario, produtos: {} };
-      }
-      if (!pessoas[row.Colaborador].produtos[row.Item]) {
-        pessoas[row.Colaborador].produtos[row.Item] = 0;
-      }
+      if (!pessoas[row.Colaborador]) pessoas[row.Colaborador] = { usuario: row.Usuario, produtos: {} };
+      if (!pessoas[row.Colaborador].produtos[row.Item]) pessoas[row.Colaborador].produtos[row.Item] = 0;
       pessoas[row.Colaborador].produtos[row.Item] += 1;
     }
     const pessoasOrdenadas = Object.keys(pessoas).sort();
 
+    // Vendas por produto (para aba estoque)
+    const vendasPorProduto = {};
+    for (const row of rows) {
+      if (!vendasPorProduto[row.Item]) vendasPorProduto[row.Item] = { qtd: 0, receita: 0 };
+      vendasPorProduto[row.Item].qtd += 1;
+      vendasPorProduto[row.Item].receita += Number(row.Valor || 0);
+    }
+
     // ===== GERAR EXCEL COM EXCELJS =====
     const workbook = new ExcelJS.Workbook();
-    const ws = workbook.addWorksheet('Controle de Consumo');
 
-    const numProdutos = produtos.length;
-    // Colunas: Qtde | Nome | C Custo | [produtos qtd...] | [produtos total...]
-    // Col A = Qtde, B = Nome, C = C Custo
-    // D até D+numProdutos-1 = quantidade de cada produto
-    // D+numProdutos até D+2*numProdutos-1 = total R$ de cada produto
-    const colInicioQtd = 4; // coluna D (1-indexed)
-    const colInicioTotal = colInicioQtd + numProdutos;
-    const totalCols = 3 + numProdutos + numProdutos; // Qtde + Nome + CCusto + qtds + totais
-
-    // Estilos
+    // Estilos reutiliz\u00e1veis
     const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB8D4E8' } };
-    const azulMedio = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF9CC0DE' } };
     const branco = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+    const verdeCl = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
     const bordaFina = {
       top: { style: 'thin', color: { argb: 'FF888888' } },
       left: { style: 'thin', color: { argb: 'FF888888' } },
@@ -1392,10 +1427,23 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     const fonteNormal = { size: 10, name: 'Arial' };
     const fonteTitulo = { bold: true, size: 13, name: 'Arial' };
     const fontePreco = { bold: true, size: 9, name: 'Arial', color: { argb: 'FFCC0000' } };
+    const fonteTotalVerm = { bold: true, size: 10, name: 'Arial', color: { argb: 'FFCC0000' } };
     const alinhaCentro = { horizontal: 'center', vertical: 'middle', wrapText: true };
     const alinhaEsquerda = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
-    // ===== LINHA 1: TÍTULO =====
+    // ============================================================
+    // ABA 1: CONTROLE DE CONSUMO
+    // ============================================================
+    const ws = workbook.addWorksheet('Controle de Consumo');
+
+    // Colunas: Qtde | Nome | C Custo | [qtd produtos...] | [total produtos...] | Total Produtos | Total R$
+    const colInicioQtd = 4;
+    const colInicioTotal = colInicioQtd + numProdutos;
+    const colTotalProdutos = colInicioTotal + numProdutos;
+    const colTotalRS = colTotalProdutos + 1;
+    const totalCols = colTotalRS;
+
+    // LINHA 1: T\u00cdTULO
     ws.mergeCells(1, 1, 1, totalCols);
     const cellTitulo = ws.getCell(1, 1);
     cellTitulo.value = `CONTROLE DE CONSUMO INTERNO PARA DESCONTO EM FOLHA - ${periodoTitulo}`;
@@ -1404,76 +1452,46 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     cellTitulo.fill = azulClaro;
     ws.getRow(1).height = 30;
 
-    // ===== LINHA 2: CABEÇALHO - Nomes dos produtos (quantidade) e "TOTAL" =====
-    ws.mergeCells(2, 1, 4, 1); // Qtde
-    ws.mergeCells(2, 2, 4, 2); // Nome
-    ws.mergeCells(2, 3, 4, 3); // C Custo
+    // LINHAS 2-4: CABE\u00c7ALHO
+    ws.mergeCells(2, 1, 4, 1);
+    ws.mergeCells(2, 2, 4, 2);
+    ws.mergeCells(2, 3, 4, 3);
 
-    const cellQtde = ws.getCell(2, 1);
-    cellQtde.value = 'Qtde';
-    cellQtde.font = fonteNegrito;
-    cellQtde.alignment = alinhaCentro;
-    cellQtde.fill = azulClaro;
-    cellQtde.border = bordaFina;
+    const setCellStyle = (r, c, val, font, align, fill) => {
+      const cell = ws.getCell(r, c);
+      cell.value = val; cell.font = font; cell.alignment = align; cell.fill = fill; cell.border = bordaFina;
+      return cell;
+    };
 
-    const cellNome = ws.getCell(2, 2);
-    cellNome.value = 'NOME';
-    cellNome.font = fonteNegrito;
-    cellNome.alignment = alinhaCentro;
-    cellNome.fill = azulClaro;
-    cellNome.border = bordaFina;
+    setCellStyle(2, 1, 'Qtde', fonteNegrito, alinhaCentro, azulClaro);
+    setCellStyle(2, 2, 'NOME', fonteNegrito, alinhaCentro, azulClaro);
+    setCellStyle(2, 3, 'C CUSTO', fonteNegrito, alinhaCentro, azulClaro);
 
-    const cellCCusto = ws.getCell(2, 3);
-    cellCCusto.value = 'C CUSTO';
-    cellCCusto.font = fonteNegrito;
-    cellCCusto.alignment = alinhaCentro;
-    cellCCusto.fill = azulClaro;
-    cellCCusto.border = bordaFina;
-
-    // Cabeçalho dos produtos (seção quantidade) - linha 2-3 merged por produto
     for (let i = 0; i < numProdutos; i++) {
       const col = colInicioQtd + i;
       ws.mergeCells(2, col, 3, col);
-      const cell = ws.getCell(2, col);
-      cell.value = produtos[i].toUpperCase();
-      cell.font = fonteNegrito;
-      cell.alignment = alinhaCentro;
-      cell.fill = azulClaro;
-      cell.border = bordaFina;
-
-      // Linha 4: preço unitário
-      const cellPreco = ws.getCell(4, col);
-      cellPreco.value = `R$  ${precos[i].toFixed(2).replace('.', ',')}`;
-      cellPreco.font = fontePreco;
-      cellPreco.alignment = alinhaCentro;
-      cellPreco.fill = azulClaro;
-      cellPreco.border = bordaFina;
+      setCellStyle(2, col, produtos[i].toUpperCase(), fonteNegrito, alinhaCentro, azulClaro);
+      setCellStyle(4, col, `R$  ${precos[i].toFixed(2).replace('.', ',')}`, fontePreco, alinhaCentro, azulClaro);
     }
 
-    // Cabeçalho "TOTAL" merged sobre as colunas de total
+    // Cabe\u00e7alho TOTAL (produtos R$)
     if (numProdutos > 0) {
       ws.mergeCells(2, colInicioTotal, 2, colInicioTotal + numProdutos - 1);
-      const cellTotal = ws.getCell(2, colInicioTotal);
-      cellTotal.value = 'TOTAL';
-      cellTotal.font = { bold: true, size: 12, name: 'Arial', color: { argb: 'FFCC0000' } };
-      cellTotal.alignment = alinhaCentro;
-      cellTotal.fill = azulClaro;
-      cellTotal.border = bordaFina;
+      setCellStyle(2, colInicioTotal, 'TOTAL', { bold: true, size: 12, name: 'Arial', color: { argb: 'FFCC0000' } }, alinhaCentro, azulClaro);
     }
-
-    // Linha 3: nomes dos produtos na seção TOTAL
     for (let i = 0; i < numProdutos; i++) {
       const col = colInicioTotal + i;
       ws.mergeCells(3, col, 4, col);
-      const cell = ws.getCell(3, col);
-      cell.value = produtos[i].toUpperCase();
-      cell.font = fonteNegrito;
-      cell.alignment = alinhaCentro;
-      cell.fill = azulClaro;
-      cell.border = bordaFina;
+      setCellStyle(3, col, produtos[i].toUpperCase(), fonteNegrito, alinhaCentro, azulClaro);
     }
 
-    // Aplicar borda nas células merged de linhas 3-4 para Qtde, Nome, CCusto
+    // Cabe\u00e7alhos Total Produtos e Total R$
+    ws.mergeCells(2, colTotalProdutos, 4, colTotalProdutos);
+    setCellStyle(2, colTotalProdutos, 'TOTAL PRODUTOS', fonteTotalVerm, alinhaCentro, azulClaro);
+    ws.mergeCells(2, colTotalRS, 4, colTotalRS);
+    setCellStyle(2, colTotalRS, 'TOTAL R$', fonteTotalVerm, alinhaCentro, azulClaro);
+
+    // Bordas nas c\u00e9lulas merged
     for (let r = 3; r <= 4; r++) {
       for (let c = 1; c <= 3; c++) {
         ws.getCell(r, c).border = bordaFina;
@@ -1481,87 +1499,175 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       }
     }
 
-    // ===== LINHAS DE DADOS (a partir da linha 5) =====
+    // LINHAS DE DADOS
     let linhaAtual = 5;
     for (let p = 0; p < pessoasOrdenadas.length; p++) {
       const nome = pessoasOrdenadas[p];
       const dados = pessoas[nome];
-      const isAlternada = p % 2 === 0;
-      const fillLinha = isAlternada ? azulClaro : branco;
+      const fillLinha = p % 2 === 0 ? azulClaro : branco;
 
-      // Qtde (sempre 1)
-      const cQtde = ws.getCell(linhaAtual, 1);
-      cQtde.value = 1;
-      cQtde.font = fonteNormal;
-      cQtde.alignment = alinhaCentro;
-      cQtde.fill = fillLinha;
-      cQtde.border = bordaFina;
+      setCellStyle(linhaAtual, 1, 1, fonteNormal, alinhaCentro, fillLinha);
+      setCellStyle(linhaAtual, 2, nome.toUpperCase(), fonteNormal, alinhaEsquerda, fillLinha);
+      setCellStyle(linhaAtual, 3, dados.usuario ? dados.usuario.toUpperCase() : '-', fonteNormal, alinhaEsquerda, fillLinha);
 
-      // Nome
-      const cNome = ws.getCell(linhaAtual, 2);
-      cNome.value = nome.toUpperCase();
-      cNome.font = fonteNormal;
-      cNome.alignment = alinhaEsquerda;
-      cNome.fill = fillLinha;
-      cNome.border = bordaFina;
+      let totalProdPessoa = 0;
+      let totalRSPessoa = 0;
 
-      // C Custo (usando username como referência)
-      const cCCusto = ws.getCell(linhaAtual, 3);
-      cCCusto.value = dados.usuario ? dados.usuario.toUpperCase() : '-';
-      cCCusto.font = fonteNormal;
-      cCCusto.alignment = alinhaEsquerda;
-      cCCusto.fill = fillLinha;
-      cCCusto.border = bordaFina;
-
-      // Colunas de quantidade por produto
       for (let i = 0; i < numProdutos; i++) {
         const col = colInicioQtd + i;
         const qtd = dados.produtos[produtos[i]] || 0;
-        const cell = ws.getCell(linhaAtual, col);
-        cell.value = qtd > 0 ? qtd : '-';
-        cell.font = fonteNormal;
-        cell.alignment = alinhaCentro;
-        cell.fill = fillLinha;
-        cell.border = bordaFina;
+        totalProdPessoa += qtd;
+        setCellStyle(linhaAtual, col, qtd > 0 ? qtd : '-', fonteNormal, alinhaCentro, fillLinha);
       }
 
-      // Colunas de total R$ por produto
       for (let i = 0; i < numProdutos; i++) {
         const col = colInicioTotal + i;
         const qtd = dados.produtos[produtos[i]] || 0;
         const totalProduto = qtd * precos[i];
-        const cell = ws.getCell(linhaAtual, col);
-        cell.value = totalProduto > 0 ? Number(totalProduto.toFixed(2)) : '-';
-        if (totalProduto > 0) {
-          cell.numFmt = '#,##0.00';
-        }
-        cell.font = fonteNormal;
-        cell.alignment = alinhaCentro;
-        cell.fill = fillLinha;
-        cell.border = bordaFina;
+        totalRSPessoa += totalProduto;
+        const cell = setCellStyle(linhaAtual, col, totalProduto > 0 ? Number(totalProduto.toFixed(2)) : '-', fonteNormal, alinhaCentro, fillLinha);
+        if (totalProduto > 0) cell.numFmt = '#,##0.00';
       }
+
+      // Total Produtos
+      const cTP = setCellStyle(linhaAtual, colTotalProdutos, totalProdPessoa, fonteTotalVerm, alinhaCentro, fillLinha);
+      // Total R$
+      const cTR = setCellStyle(linhaAtual, colTotalRS, Number(totalRSPessoa.toFixed(2)), fonteTotalVerm, alinhaCentro, fillLinha);
+      cTR.numFmt = '#,##0.00';
 
       linhaAtual++;
     }
 
-    // ===== LARGURAS DAS COLUNAS =====
-    ws.getColumn(1).width = 6;  // Qtde
-    ws.getColumn(2).width = 42; // Nome
-    ws.getColumn(3).width = 20; // C Custo
+    // LARGURAS
+    ws.getColumn(1).width = 6;
+    ws.getColumn(2).width = 42;
+    ws.getColumn(3).width = 20;
     for (let i = 0; i < numProdutos; i++) {
       ws.getColumn(colInicioQtd + i).width = 16;
       ws.getColumn(colInicioTotal + i).width = 16;
     }
-
-    // Alturas das linhas de cabeçalho
+    ws.getColumn(colTotalProdutos).width = 16;
+    ws.getColumn(colTotalRS).width = 16;
     ws.getRow(2).height = 28;
     ws.getRow(3).height = 22;
     ws.getRow(4).height = 20;
 
+    // ============================================================
+    // ABA 2: ESTOQUE
+    // ============================================================
+    const wsE = workbook.addWorksheet('Estoque');
+
+    const colsEstoque = 7;
+    // Colunas: Produto | Pre\u00e7o Venda | Qtd Entrada | Qtd Vendida | Custo Total | Receita Venda | Lucro
+
+    // LINHA 1: T\u00cdTULO
+    wsE.mergeCells(1, 1, 1, colsEstoque);
+    const cellTituloE = wsE.getCell(1, 1);
+    cellTituloE.value = `CONTROLE DE ESTOQUE - ${periodoTitulo}`;
+    cellTituloE.font = fonteTitulo;
+    cellTituloE.alignment = { horizontal: 'center', vertical: 'middle' };
+    cellTituloE.fill = azulClaro;
+    wsE.getRow(1).height = 30;
+
+    // LINHA 2: CABE\u00c7ALHO
+    const cabEstoque = ['PRODUTO', 'PRE\u00c7O VENDA (R$)', 'QTD ENTRADA', 'QTD VENDIDA', 'CUSTO TOTAL (R$)', 'RECEITA VENDA (R$)', 'LUCRO (R$)'];
+    for (let c = 0; c < cabEstoque.length; c++) {
+      const cell = wsE.getCell(2, c + 1);
+      cell.value = cabEstoque[c];
+      cell.font = fonteNegrito;
+      cell.alignment = alinhaCentro;
+      cell.fill = azulClaro;
+      cell.border = bordaFina;
+    }
+    wsE.getRow(2).height = 28;
+
+    // Juntar dados de estoque e vendas por produto
+    const todosProdutosEstoque = new Set();
+    for (const s of stockRows) todosProdutosEstoque.add(s.product_name);
+    for (const v of Object.keys(vendasPorProduto)) todosProdutosEstoque.add(v);
+    const produtosEstoqueOrdenados = [...todosProdutosEstoque].sort();
+
+    let linhaE = 3;
+    let totalEntradaGeral = 0, totalVendidaGeral = 0, totalCustoGeral = 0, totalReceitaGeral = 0, totalLucroGeral = 0;
+
+    for (let p = 0; p < produtosEstoqueOrdenados.length; p++) {
+      const nome = produtosEstoqueOrdenados[p];
+      const fillLinha = p % 2 === 0 ? azulClaro : branco;
+
+      const stockInfo = stockRows.find(s => s.product_name === nome);
+      const vendaInfo = vendasPorProduto[nome];
+      const precoVenda = precosVenda[nome] || 0;
+
+      const qtdEntrada = stockInfo ? Number(stockInfo.total_entrada) : 0;
+      const custoTotal = stockInfo ? Number(stockInfo.custo_total) : 0;
+      const qtdVendida = vendaInfo ? vendaInfo.qtd : 0;
+      const receitaVenda = vendaInfo ? vendaInfo.receita : 0;
+      const lucro = receitaVenda - custoTotal;
+
+      totalEntradaGeral += qtdEntrada;
+      totalVendidaGeral += qtdVendida;
+      totalCustoGeral += custoTotal;
+      totalReceitaGeral += receitaVenda;
+      totalLucroGeral += lucro;
+
+      const setE = (c, val, fmt) => {
+        const cell = wsE.getCell(linhaE, c);
+        cell.value = val; cell.font = fonteNormal; cell.alignment = alinhaCentro; cell.fill = fillLinha; cell.border = bordaFina;
+        if (fmt) cell.numFmt = fmt;
+        return cell;
+      };
+
+      wsE.getCell(linhaE, 1).value = nome.toUpperCase();
+      wsE.getCell(linhaE, 1).font = fonteNormal;
+      wsE.getCell(linhaE, 1).alignment = alinhaEsquerda;
+      wsE.getCell(linhaE, 1).fill = fillLinha;
+      wsE.getCell(linhaE, 1).border = bordaFina;
+
+      setE(2, Number(precoVenda.toFixed(2)), '#,##0.00');
+      setE(3, qtdEntrada);
+      setE(4, qtdVendida);
+      setE(5, Number(custoTotal.toFixed(2)), '#,##0.00');
+      setE(6, Number(receitaVenda.toFixed(2)), '#,##0.00');
+
+      const cellLucro = setE(7, Number(lucro.toFixed(2)), '#,##0.00');
+      cellLucro.font = { bold: true, size: 10, name: 'Arial', color: { argb: lucro >= 0 ? 'FF006100' : 'FFCC0000' } };
+
+      linhaE++;
+    }
+
+    // LINHA TOTAL GERAL
+    const fillTotal = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF9CC0DE' } };
+    const setTot = (c, val, fmt) => {
+      const cell = wsE.getCell(linhaE, c);
+      cell.value = val; cell.font = fonteTotalVerm; cell.alignment = alinhaCentro; cell.fill = fillTotal; cell.border = bordaFina;
+      if (fmt) cell.numFmt = fmt;
+      return cell;
+    };
+    wsE.getCell(linhaE, 1).value = 'TOTAL GERAL';
+    wsE.getCell(linhaE, 1).font = fonteTotalVerm;
+    wsE.getCell(linhaE, 1).alignment = alinhaEsquerda;
+    wsE.getCell(linhaE, 1).fill = fillTotal;
+    wsE.getCell(linhaE, 1).border = bordaFina;
+    setTot(2, '-');
+    setTot(3, totalEntradaGeral);
+    setTot(4, totalVendidaGeral);
+    setTot(5, Number(totalCustoGeral.toFixed(2)), '#,##0.00');
+    setTot(6, Number(totalReceitaGeral.toFixed(2)), '#,##0.00');
+    const cellLucroTotal = setTot(7, Number(totalLucroGeral.toFixed(2)), '#,##0.00');
+    cellLucroTotal.font = { bold: true, size: 11, name: 'Arial', color: { argb: totalLucroGeral >= 0 ? 'FF006100' : 'FFCC0000' } };
+
+    // LARGURAS ABA ESTOQUE
+    wsE.getColumn(1).width = 35;
+    wsE.getColumn(2).width = 18;
+    wsE.getColumn(3).width = 16;
+    wsE.getColumn(4).width = 16;
+    wsE.getColumn(5).width = 20;
+    wsE.getColumn(6).width = 20;
+    wsE.getColumn(7).width = 18;
+
     // ===== SALVAR E ENVIAR =====
     const fileName = `controle-consumo-${periodoLabel}.xlsx`;
     const filePath = path.join(baseDir, fileName);
-
     await workbook.xlsx.writeFile(filePath);
 
     res.download(filePath, fileName, (downloadErr) => {
@@ -1570,7 +1676,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Erro ao gerar relatório.');
+    res.status(500).send('Erro ao gerar relat\u00f3rio.');
   }
 });
 
