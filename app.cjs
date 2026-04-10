@@ -458,6 +458,117 @@ const templates = {
       vertical-align:top;
     }
     a { text-decoration:none; color:inherit; }
+
+    /* Carrinho e cards clicáveis */
+    .info.clickable {
+      cursor:pointer;
+      transition: transform .15s, box-shadow .15s, border-color .15s;
+      position:relative;
+    }
+    .info.clickable:hover {
+      transform:translateY(-3px);
+      box-shadow:0 8px 24px rgba(37,99,235,.25);
+      border-color:var(--accent2);
+    }
+    .info.clickable.selected {
+      border-color:var(--success);
+      box-shadow:0 0 0 2px var(--success), 0 8px 24px rgba(37,193,140,.2);
+    }
+    .info.clickable.unavailable {
+      opacity:.5;
+      cursor:not-allowed;
+    }
+    .badge-cart {
+      position:absolute;
+      top:10px;
+      right:10px;
+      background:var(--success);
+      color:#fff;
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:800;
+      font-size:14px;
+    }
+    #cart-section {
+      position:sticky;
+      top:20px;
+    }
+    .cart-item {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:12px 0;
+      border-bottom:1px solid rgba(255,255,255,.08);
+      gap:10px;
+    }
+    .cart-item-info {
+      flex:1;
+    }
+    .cart-item-name {
+      font-weight:700;
+    }
+    .cart-item-price {
+      color:var(--muted);
+      font-size:14px;
+    }
+    .cart-qty {
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .cart-qty button {
+      width:32px;
+      height:32px;
+      border-radius:8px;
+      padding:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:18px;
+      font-weight:800;
+    }
+    .cart-qty span {
+      font-weight:700;
+      font-size:16px;
+      min-width:20px;
+      text-align:center;
+    }
+    .btn-remove {
+      background:linear-gradient(135deg, #cc314f, #ff6b84);
+      width:28px;
+      height:28px;
+      border-radius:8px;
+      padding:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:14px;
+    }
+    .cart-total {
+      font-size:22px;
+      font-weight:800;
+      margin-top:14px;
+      padding-top:14px;
+      border-top:2px solid rgba(255,255,255,.12);
+      display:flex;
+      justify-content:space-between;
+    }
+    .cart-empty {
+      color:var(--muted);
+      text-align:center;
+      padding:20px 0;
+    }
+    #btn-confirmar {
+      width:100%;
+      margin-top:16px;
+      padding:16px;
+      font-size:16px;
+      border-radius:14px;
+    }
   </style>
 </head>
 <body>
@@ -496,78 +607,77 @@ const templates = {
 
     <div class="card">
       <h2>Produtos cadastrados</h2>
+      <% if (user.role === 'employee') { %>
+        <p class="muted" style="margin-top:0;">Clique nos produtos para adicionar ao carrinho.</p>
+      <% } %>
       <div class="grid">
         <% products.forEach(item => { %>
-          <div class="info">
-            <span class="pill">Produto</span>
-
-            <% if (item.image_url) { %>
-              <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
-            <% } %>
-
-            <h3 style="margin:10px 0 0;"><%= item.name %></h3>
-            <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
-
-            <% if (user.role === 'admin' || user.role === 'finance') { %>
-              <% const estoque = Number(item.stock_quantity || 0); %>
-              <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
-                Estoque atual: <%= estoque %>
-              </div>
-            <% } %>
-
-            <% if (user.role === 'admin') { %>
-              <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
-                <div class="form-row">
-                  <div><input type="text" name="name" value="<%= item.name %>" required /></div>
-                  <div><input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required /></div>
-                  <div><input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" /></div>
-                  <div><input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" /></div>
+          <% if (user.role === 'employee') { %>
+            <div class="info clickable <%= Number(item.stock_quantity || 0) <= 0 ? 'unavailable' : '' %>"
+                 data-id="<%= item.id %>"
+                 data-name="<%= item.name %>"
+                 data-price="<%= Number(item.price).toFixed(2) %>"
+                 data-stock="<%= item.stock_quantity || 0 %>"
+                 onclick="addToCart(this)">
+              <span class="pill">Produto</span>
+              <% if (item.image_url) { %>
+                <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
+              <% } %>
+              <h3 style="margin:10px 0 0;"><%= item.name %></h3>
+              <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
+              <% if (Number(item.stock_quantity || 0) <= 0) { %>
+                <div class="stock-box stock-zero">INDISPON\u00cdVEL</div>
+              <% } %>
+            </div>
+          <% } else { %>
+            <div class="info">
+              <span class="pill">Produto</span>
+              <% if (item.image_url) { %>
+                <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
+              <% } %>
+              <h3 style="margin:10px 0 0;"><%= item.name %></h3>
+              <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
+              <% if (user.role === 'admin' || user.role === 'finance') { %>
+                <% const estoque = Number(item.stock_quantity || 0); %>
+                <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
+                  Estoque atual: <%= estoque %>
                 </div>
-
-                <div class="actions" style="margin-top:10px;">
-                  <button type="submit">Salvar</button>
-                </div>
-              </form>
-
-              <form method="POST" action="/admin/products/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este produto?');" style="margin-top:10px;">
-                <button type="submit" class="btn-danger">Excluir produto</button>
-              </form>
-            <% } %>
-          </div>
+              <% } %>
+              <% if (user.role === 'admin') { %>
+                <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
+                  <div class="form-row">
+                    <div><input type="text" name="name" value="<%= item.name %>" required /></div>
+                    <div><input type="number" step="0.01" min="0" name="price" value="<%= Number(item.price).toFixed(2) %>" required /></div>
+                    <div><input type="text" name="image_url" value="<%= item.image_url || '' %>" placeholder="/produtos/coca-350ml.jpg" /></div>
+                    <div><input type="number" min="0" name="stock_quantity" value="<%= item.stock_quantity || 0 %>" placeholder="Estoque" /></div>
+                  </div>
+                  <div class="actions" style="margin-top:10px;">
+                    <button type="submit">Salvar</button>
+                  </div>
+                </form>
+                <form method="POST" action="/admin/products/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este produto?');" style="margin-top:10px;">
+                  <button type="submit" class="btn-danger">Excluir produto</button>
+                </form>
+              <% } %>
+            </div>
+          <% } %>
         <% }) %>
       </div>
     </div>
 
     <% if (user.role === 'employee') { %>
-      <div class="card">
-        <h2>Registrar retirada</h2>
-        <form method="POST" action="/withdraw">
-          <div class="form-row">
-            <div>
-              <label>Escolha o item</label><br /><br />
-              <select name="item_id" required>
-                <% products.forEach(item => { %>
-                  <option value="<%= item.id %>" <%= Number(item.stock_quantity || 0) <= 0 ? 'disabled' : '' %>>
-                    <%= item.name %> - R$ <%= Number(item.price).toFixed(2).replace('.', ',') %>
-                    <%= Number(item.stock_quantity || 0) <= 0 ? ' | INDISPON\u00cdVEL' : '' %>
-                  </option>
-                <% }) %>
-              </select>
-            </div>
-
-            <div style="max-width:220px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="submit">Marcar retirada</button>
-            </div>
-
-            <div style="max-width:220px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="button" class="btn-pix" onclick="alert('Pagamento via Pix: configurar chave Pix da empresa aqui.')">
-                Pagar com Pix
-              </button>
-            </div>
-          </div>
-        </form>
+      <div class="card" id="cart-section">
+        <h2>Carrinho</h2>
+        <div id="cart-items">
+          <div class="cart-empty" id="cart-empty">Seu carrinho est\u00e1 vazio. Clique em um produto para adicionar.</div>
+        </div>
+        <div class="cart-total" id="cart-total" style="display:none;">
+          <span>Total:</span>
+          <span id="cart-total-value">R$ 0,00</span>
+        </div>
+        <button type="button" id="btn-confirmar" style="display:none;" onclick="confirmarRetirada()">
+          Confirmar retirada
+        </button>
       </div>
 
       <div class="card">
@@ -826,6 +936,144 @@ const templates = {
         else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
         else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
         e.target.value = v;
+      });
+    }
+
+    // ===== SISTEMA DE CARRINHO =====
+    var cart = {};
+
+    function addToCart(el) {
+      if (el.classList.contains('unavailable')) return;
+      var id = el.dataset.id;
+      var name = el.dataset.name;
+      var price = parseFloat(el.dataset.price);
+      var stock = parseInt(el.dataset.stock);
+
+      if (!cart[id]) {
+        cart[id] = { id: id, name: name, price: price, stock: stock, qty: 0 };
+      }
+
+      if (cart[id].qty >= cart[id].stock) {
+        alert('Quantidade m\u00e1xima dispon\u00edvel: ' + cart[id].stock);
+        return;
+      }
+
+      cart[id].qty += 1;
+      renderCart();
+    }
+
+    function changeQty(id, delta) {
+      if (!cart[id]) return;
+      cart[id].qty += delta;
+      if (cart[id].qty <= 0) {
+        delete cart[id];
+      } else if (cart[id].qty > cart[id].stock) {
+        cart[id].qty = cart[id].stock;
+        alert('Quantidade m\u00e1xima dispon\u00edvel: ' + cart[id].stock);
+      }
+      renderCart();
+    }
+
+    function removeFromCart(id) {
+      delete cart[id];
+      renderCart();
+    }
+
+    function renderCart() {
+      var container = document.getElementById('cart-items');
+      var emptyMsg = document.getElementById('cart-empty');
+      var totalDiv = document.getElementById('cart-total');
+      var totalValue = document.getElementById('cart-total-value');
+      var btnConfirmar = document.getElementById('btn-confirmar');
+
+      var keys = Object.keys(cart);
+
+      // Atualizar badges nos cards
+      document.querySelectorAll('.info.clickable').forEach(function(card) {
+        var existingBadge = card.querySelector('.badge-cart');
+        if (existingBadge) existingBadge.remove();
+        card.classList.remove('selected');
+
+        var cid = card.dataset.id;
+        if (cart[cid] && cart[cid].qty > 0) {
+          card.classList.add('selected');
+          var badge = document.createElement('div');
+          badge.className = 'badge-cart';
+          badge.textContent = cart[cid].qty;
+          card.appendChild(badge);
+        }
+      });
+
+      if (keys.length === 0) {
+        container.innerHTML = '<div class="cart-empty">Seu carrinho est\u00e1 vazio. Clique em um produto para adicionar.</div>';
+        totalDiv.style.display = 'none';
+        btnConfirmar.style.display = 'none';
+        return;
+      }
+
+      var html = '';
+      var total = 0;
+      var totalItens = 0;
+
+      keys.forEach(function(id) {
+        var item = cart[id];
+        var subtotal = item.qty * item.price;
+        total += subtotal;
+        totalItens += item.qty;
+
+        html += '<div class="cart-item">';
+        html += '  <div class="cart-item-info">';
+        html += '    <div class="cart-item-name">' + item.name + '</div>';
+        html += '    <div class="cart-item-price">R$ ' + item.price.toFixed(2).replace('.', ',') + ' x ' + item.qty + ' = R$ ' + subtotal.toFixed(2).replace('.', ',') + '</div>';
+        html += '  </div>';
+        html += '  <div class="cart-qty">';
+        html += '    <button type="button" onclick="changeQty(\'' + id + '\', -1)">-</button>';
+        html += '    <span>' + item.qty + '</span>';
+        html += '    <button type="button" onclick="changeQty(\'' + id + '\', 1)">+</button>';
+        html += '  </div>';
+        html += '  <button type="button" class="btn-remove" onclick="removeFromCart(\'' + id + '\')" title="Remover">X</button>';
+        html += '</div>';
+      });
+
+      container.innerHTML = html;
+      totalDiv.style.display = 'flex';
+      totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+      btnConfirmar.style.display = 'block';
+      btnConfirmar.textContent = 'Confirmar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
+    }
+
+    function confirmarRetirada() {
+      var keys = Object.keys(cart);
+      if (keys.length === 0) return;
+
+      var items = [];
+      var resumo = '';
+      keys.forEach(function(id) {
+        var item = cart[id];
+        items.push({ item_id: parseInt(id), qty: item.qty });
+        resumo += item.name + ' x' + item.qty + '\n';
+      });
+
+      if (!confirm('Confirmar retirada?\n\n' + resumo)) return;
+
+      fetch('/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.success) {
+          cart = {};
+          renderCart();
+          alert(data.message || 'Retirada registrada com sucesso!');
+          window.location.reload();
+        } else {
+          alert(data.message || 'Erro ao registrar retirada.');
+        }
+      })
+      .catch(function() {
+        alert('Erro de conex\u00e3o. Tente novamente.');
       });
     }
   </script>
@@ -1189,58 +1437,105 @@ app.post('/withdraw', requireAuth, async (req, res) => {
   const user = req.session.user;
 
   if (user.role !== 'employee') {
-    return res.status(403).send('Somente colaboradores podem registrar retiradas.');
+    return res.status(403).json({ success: false, message: 'Somente colaboradores podem registrar retiradas.' });
   }
 
-  const { item_id } = req.body;
+  const { items, item_id } = req.body;
 
-  try {
-    const productResult = await pool.query(
-      `SELECT * FROM products WHERE id = $1`,
-      [item_id]
-    );
+  // Suporte ao carrinho (m\u00faltiplos itens via JSON)
+  if (items && Array.isArray(items) && items.length > 0) {
+    try {
+      await pool.query('BEGIN');
 
-    const product = productResult.rows[0];
+      let totalItens = 0;
+      let resumo = [];
 
-    if (!product) {
-      req.session.message = 'Produto não encontrado.';
-      return res.redirect('/dashboard');
+      for (const cartItem of items) {
+        const productResult = await pool.query('SELECT * FROM products WHERE id = $1', [cartItem.item_id]);
+        const product = productResult.rows[0];
+
+        if (!product) {
+          await pool.query('ROLLBACK');
+          return res.json({ success: false, message: `Produto ID ${cartItem.item_id} n\u00e3o encontrado.` });
+        }
+
+        const qty = Math.min(parseInt(cartItem.qty) || 1, Number(product.stock_quantity));
+
+        if (qty <= 0) {
+          await pool.query('ROLLBACK');
+          return res.json({ success: false, message: `${product.name} est\u00e1 sem estoque.` });
+        }
+
+        // Inserir uma retirada para cada unidade
+        for (let i = 0; i < qty; i++) {
+          await pool.query(
+            'INSERT INTO withdrawals (user_id, item_id, item_name, item_price) VALUES ($1, $2, $3, $4)',
+            [user.id, product.id, product.name, product.price]
+          );
+        }
+
+        await pool.query(
+          'UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2',
+          [qty, product.id]
+        );
+
+        totalItens += qty;
+        resumo.push(`${product.name} x${qty}`);
+      }
+
+      await pool.query('COMMIT');
+
+      req.session.message = `Retirada registrada: ${resumo.join(', ')} (${totalItens} ${totalItens === 1 ? 'item' : 'itens'}).`;
+      return res.json({ success: true, message: `Retirada registrada com sucesso! ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}.` });
+    } catch (err) {
+      await pool.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      return res.json({ success: false, message: 'Erro ao registrar retirada.' });
     }
-
-    if (Number(product.stock_quantity) <= 0) {
-      req.session.message = 'Este produto está sem estoque.';
-      return res.redirect('/dashboard');
-    }
-
-    await pool.query('BEGIN');
-
-    await pool.query(
-      `
-      INSERT INTO withdrawals (user_id, item_id, item_name, item_price)
-      VALUES ($1, $2, $3, $4)
-      `,
-      [user.id, product.id, product.name, product.price]
-    );
-
-    await pool.query(
-      `
-      UPDATE products
-      SET stock_quantity = stock_quantity - 1
-      WHERE id = $1
-      `,
-      [product.id]
-    );
-
-    await pool.query('COMMIT');
-
-    req.session.message = `Retirada registrada com sucesso: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
-    res.redirect('/dashboard');
-  } catch (err) {
-    await pool.query('ROLLBACK').catch(() => {});
-    console.error(err);
-    req.session.message = 'Erro ao registrar retirada.';
-    res.redirect('/dashboard');
   }
+
+  // Fallback: retirada individual (compatibilidade)
+  if (item_id) {
+    try {
+      const productResult = await pool.query('SELECT * FROM products WHERE id = $1', [item_id]);
+      const product = productResult.rows[0];
+
+      if (!product) {
+        req.session.message = 'Produto n\u00e3o encontrado.';
+        return res.redirect('/dashboard');
+      }
+
+      if (Number(product.stock_quantity) <= 0) {
+        req.session.message = 'Este produto est\u00e1 sem estoque.';
+        return res.redirect('/dashboard');
+      }
+
+      await pool.query('BEGIN');
+
+      await pool.query(
+        'INSERT INTO withdrawals (user_id, item_id, item_name, item_price) VALUES ($1, $2, $3, $4)',
+        [user.id, product.id, product.name, product.price]
+      );
+
+      await pool.query(
+        'UPDATE products SET stock_quantity = stock_quantity - 1 WHERE id = $1',
+        [product.id]
+      );
+
+      await pool.query('COMMIT');
+
+      req.session.message = `Retirada registrada: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
+      return res.redirect('/dashboard');
+    } catch (err) {
+      await pool.query('ROLLBACK').catch(() => {});
+      console.error(err);
+      req.session.message = 'Erro ao registrar retirada.';
+      return res.redirect('/dashboard');
+    }
+  }
+
+  req.session.message = 'Nenhum item selecionado.';
+  res.redirect('/dashboard');
 });
 
 app.post('/admin/users', requireAdmin, async (req, res) => {
