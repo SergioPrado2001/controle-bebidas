@@ -1341,27 +1341,47 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
 
     const rows = result.rows;
 
+    // --- Aba 1: Detalhado (todos os pedidos) ---
+    const workbook = XLSX.utils.book_new();
+    const detalheWs = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, detalheWs, 'Todos os Pedidos');
+
+    // --- Aba 2: Resumo por Pessoa ---
     const resumoPorPessoa = {};
     for (const row of rows) {
       if (!resumoPorPessoa[row.Colaborador]) {
-        resumoPorPessoa[row.Colaborador] = { total: 0, valor: 0 };
+        resumoPorPessoa[row.Colaborador] = { usuario: row.Usuario, total: 0, valor: 0 };
       }
       resumoPorPessoa[row.Colaborador].total += 1;
       resumoPorPessoa[row.Colaborador].valor += Number(row.Valor || 0);
     }
 
-    const resumoSheet = Object.entries(resumoPorPessoa).map(([colaborador, dados]) => ({
+    const resumoPessoaSheet = Object.entries(resumoPorPessoa).map(([colaborador, dados]) => ({
       Colaborador: colaborador,
-      TotalRetiradas: dados.total,
-      TotalEmReais: Number(dados.valor.toFixed(2)),
+      Usuario: dados.usuario,
+      'Total de Pedidos': dados.total,
+      'Total em R$': Number(dados.valor.toFixed(2)),
     }));
 
-    const workbook = XLSX.utils.book_new();
-    const detalheWs = XLSX.utils.json_to_sheet(rows);
-    const resumoWs = XLSX.utils.json_to_sheet(resumoSheet);
+    const resumoPessoaWs = XLSX.utils.json_to_sheet(resumoPessoaSheet);
+    XLSX.utils.book_append_sheet(workbook, resumoPessoaWs, 'Total por Pessoa');
 
-    XLSX.utils.book_append_sheet(workbook, detalheWs, 'Detalhado');
-    XLSX.utils.book_append_sheet(workbook, resumoWs, 'Resumo');
+    // --- Aba 3: Total Geral ---
+    let totalGeralPedidos = rows.length;
+    let totalGeralValor = 0;
+    for (const row of rows) {
+      totalGeralValor += Number(row.Valor || 0);
+    }
+
+    const totalGeralSheet = [
+      { Descricao: 'Total de Pedidos', Valor: totalGeralPedidos },
+      { Descricao: 'Total de Colaboradores', Valor: Object.keys(resumoPorPessoa).length },
+      { Descricao: 'Valor Total em R$', Valor: Number(totalGeralValor.toFixed(2)) },
+      { Descricao: 'Mes de Referencia', Valor: month },
+    ];
+
+    const totalGeralWs = XLSX.utils.json_to_sheet(totalGeralSheet);
+    XLSX.utils.book_append_sheet(workbook, totalGeralWs, 'Total Geral');
 
     const fileName = `relatorio-bebidas-${month}.xlsx`;
     const filePath = path.join(baseDir, fileName);
