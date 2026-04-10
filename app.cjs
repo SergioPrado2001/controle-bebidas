@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
+const multer = require('multer');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
@@ -48,6 +49,17 @@ app.use(
 
 app.set('view engine', 'ejs');
 app.set('views', viewsDir);
+
+// Multer para upload de notas fiscais (armazena em mem\u00f3ria)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB m\u00e1ximo
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Formato n\u00e3o permitido. Envie PDF, JPG, PNG ou WEBP.'));
+  }
+});
 
 const templates = {
   'login.ejs': `
@@ -699,7 +711,75 @@ const templates = {
       </div>
 
       <div class="card">
-        <h2>Lançamentos recentes</h2>
+        <h2>Notas Fiscais</h2>
+
+        <% if (user.role === 'admin' || user.role === 'finance') { %>
+          <form method="POST" action="/invoices/upload" enctype="multipart/form-data" style="margin-bottom:20px;">
+            <div class="form-row">
+              <div>
+                <label>M\u00eas de refer\u00eancia</label><br /><br />
+                <input type="month" name="reference_month" required />
+              </div>
+              <div>
+                <label>Arquivo (PDF, JPG, PNG)</label><br /><br />
+                <input type="file" name="invoice_file" accept=".pdf,.jpg,.jpeg,.png,.webp" required style="background:rgba(255,255,255,.05); padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,.12); color:#eef4ff;" />
+              </div>
+              <div style="max-width:240px;">
+                <label>&nbsp;</label><br /><br />
+                <button type="submit">Enviar nota</button>
+              </div>
+            </div>
+          </form>
+        <% } %>
+
+        <div style="margin-bottom:14px;">
+          <form method="GET" action="/dashboard" style="display:inline-flex; gap:10px; align-items:end;">
+            <div>
+              <label>Filtrar por m\u00eas</label><br /><br />
+              <input type="month" name="invoice_month" value="<%= typeof invoiceMonth !== 'undefined' ? invoiceMonth : '' %>" />
+            </div>
+            <div><button type="submit">Filtrar</button></div>
+          </form>
+        </div>
+
+        <% if (typeof invoices !== 'undefined' && invoices.length > 0) { %>
+          <table>
+            <thead>
+              <tr>
+                <th>M\u00eas Ref.</th>
+                <th>Arquivo</th>
+                <th>Enviado em</th>
+                <th>Visualizar</th>
+                <th>Baixar</th>
+                <% if (user.role === 'admin' || user.role === 'finance') { %><th>Excluir</th><% } %>
+              </tr>
+            </thead>
+            <tbody>
+              <% invoices.forEach(inv => { %>
+                <tr>
+                  <td><%= inv.reference_month %></td>
+                  <td><%= inv.file_name %></td>
+                  <td><%= dayjs(inv.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm') %></td>
+                  <td><a href="/invoices/<%= inv.id %>/view" target="_blank" style="color:#5a8dff; text-decoration:none; font-weight:700;">Abrir</a></td>
+                  <td><a href="/invoices/<%= inv.id %>/download" style="color:#25c18c; text-decoration:none; font-weight:700;">Baixar</a></td>
+                  <% if (user.role === 'admin' || user.role === 'finance') { %>
+                    <td>
+                      <form method="POST" action="/invoices/<%= inv.id %>/delete" onsubmit="return confirm('Deseja excluir esta nota fiscal?')" style="margin:0;">
+                        <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
+                      </form>
+                    </td>
+                  <% } %>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        <% } else { %>
+          <p class="muted">Nenhuma nota fiscal encontrada<%= typeof invoiceMonth !== 'undefined' && invoiceMonth ? ' para o m\u00eas selecionado' : '' %>.</p>
+        <% } %>
+      </div>
+
+      <div class="card">
+        <h2>Lan\u00e7amentos recentes</h2>
         <table>
           <thead>
             <tr>
@@ -809,6 +889,18 @@ async function initDB() {
       quantity INTEGER NOT NULL,
       unit_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
       total_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS invoices (
+      id SERIAL PRIMARY KEY,
+      reference_month TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_type TEXT NOT NULL,
+      file_data BYTEA NOT NULL,
+      uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
   `);
@@ -1027,6 +1119,20 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       });
     }
 
+    // Buscar notas fiscais (filtro opcional por m\u00eas)
+    const invoiceMonth = req.query.invoice_month || '';
+    let invoicesResult;
+    if (invoiceMonth) {
+      invoicesResult = await pool.query(
+        'SELECT id, reference_month, file_name, file_type, created_at FROM invoices WHERE reference_month = $1 ORDER BY created_at DESC',
+        [invoiceMonth]
+      );
+    } else {
+      invoicesResult = await pool.query(
+        'SELECT id, reference_month, file_name, file_type, created_at FROM invoices ORDER BY reference_month DESC, created_at DESC LIMIT 50'
+      );
+    }
+
     const withdrawalsAllResult = await pool.query(`
       SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
       FROM withdrawals w
@@ -1064,6 +1170,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       withdrawalsAll: withdrawalsAllResult.rows,
       summaryByUser: summaryByUserResult.rows,
       users,
+      invoices: invoicesResult.rows,
+      invoiceMonth,
       message,
       dayjs
     });
@@ -1717,6 +1825,92 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send('Erro ao gerar relat\u00f3rio.');
+  }
+});
+
+// ===== ROTAS DE NOTAS FISCAIS =====
+
+app.post('/invoices/upload', requireFinanceOrAdmin, upload.single('invoice_file'), async (req, res) => {
+  const { reference_month } = req.body;
+  const file = req.file;
+
+  if (!reference_month || !file) {
+    req.session.message = 'Informe o m\u00eas de refer\u00eancia e selecione um arquivo.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO invoices (reference_month, file_name, file_type, file_data, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [reference_month, file.originalname, file.mimetype, file.buffer, req.session.user.id]
+    );
+
+    req.session.message = `Nota fiscal "${file.originalname}" enviada com sucesso para ${reference_month}.`;
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao enviar nota fiscal.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.get('/invoices/:id/view', requireFinanceOrAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('SELECT file_name, file_type, file_data FROM invoices WHERE id = $1', [id]);
+    const invoice = result.rows[0];
+
+    if (!invoice) return res.status(404).send('Nota fiscal n\u00e3o encontrada.');
+
+    res.setHeader('Content-Type', invoice.file_type);
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.file_name}"`);
+    res.send(invoice.file_data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao visualizar nota fiscal.');
+  }
+});
+
+app.get('/invoices/:id/download', requireFinanceOrAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('SELECT file_name, file_type, file_data FROM invoices WHERE id = $1', [id]);
+    const invoice = result.rows[0];
+
+    if (!invoice) return res.status(404).send('Nota fiscal n\u00e3o encontrada.');
+
+    res.setHeader('Content-Type', invoice.file_type);
+    res.setHeader('Content-Disposition', `attachment; filename="${invoice.file_name}"`);
+    res.send(invoice.file_data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Erro ao baixar nota fiscal.');
+  }
+});
+
+app.post('/invoices/:id/delete', requireFinanceOrAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('SELECT file_name FROM invoices WHERE id = $1', [id]);
+    const invoice = result.rows[0];
+
+    if (!invoice) {
+      req.session.message = 'Nota fiscal n\u00e3o encontrada.';
+      return res.redirect('/dashboard');
+    }
+
+    await pool.query('DELETE FROM invoices WHERE id = $1', [id]);
+
+    req.session.message = `Nota fiscal "${invoice.file_name}" exclu\u00edda com sucesso.`;
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao excluir nota fiscal.';
+    res.redirect('/dashboard');
   }
 });
 
