@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
-const PDFDocument = require('pdfkit');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
@@ -680,23 +679,6 @@ const templates = {
             <div style="max-width:240px;">
               <label>&nbsp;</label><br /><br />
               <button type="submit">Baixar Excel</button>
-            </div>
-          </div>
-        </form>
-
-        <form method="GET" action="/reports/pdf" style="margin-top:14px;">
-          <div class="form-row">
-            <div>
-              <label>Data início</label><br /><br />
-              <input type="date" name="start" value="<%= new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10) %>" required />
-            </div>
-            <div>
-              <label>Data fim</label><br /><br />
-              <input type="date" name="end" value="<%= new Date().toISOString().slice(0,10) %>" required />
-            </div>
-            <div style="max-width:240px;">
-              <label>&nbsp;</label><br /><br />
-              <button type="submit" class="btn-soft">Baixar PDF</button>
             </div>
           </div>
         </form>
@@ -1589,76 +1571,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send('Erro ao gerar relatório.');
-  }
-});
-
-app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
-  const { start, end } = req.query;
-
-  if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-    return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
-  }
-
-  if (dayjs(end).isBefore(dayjs(start))) {
-    return res.status(400).send('A data fim não pode ser anterior à data de início.');
-  }
-
-  // Incluir o dia final inteiro (até 23:59:59)
-  const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
-
-  const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
-
-  try {
-    const result = await pool.query(
-      `
-      SELECT
-        u.name AS "Colaborador",
-        u.username AS "Usuario",
-        w.item_name AS "Item",
-        w.item_price AS "Valor",
-        w.created_at AS "DataHora"
-      FROM withdrawals w
-      INNER JOIN users u ON u.id = w.user_id
-      WHERE w.created_at >= $1 AND w.created_at < $2
-      ORDER BY u.name ASC, w.created_at ASC
-      `,
-      [start, endPlusOne]
-    );
-
-    const rows = result.rows;
-
-    const fileName = `relatorio-bebidas-${periodoLabel}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-
-    const doc = new PDFDocument({ margin: 40, size: 'A4' });
-    doc.pipe(res);
-
-    const logoPath = path.join(publicDir, 'logo-empresa.jpg');
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 40, 30, { fit: [60, 60] });
-    }
-
-    doc.fontSize(18).text('Relatório de Bebidas', 120, 40);
-    doc.fontSize(12).text(`Período: ${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}`, 120, 65);
-    doc.moveDown(3);
-
-    let totalGeral = 0;
-
-    rows.forEach((row, index) => {
-      totalGeral += Number(row.Valor || 0);
-      doc.fontSize(10).text(
-        `${index + 1}. ${dayjs(row.DataHora).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss')} | ${row.Colaborador} | ${row.Usuario} | ${row.Item} | R$ ${Number(row.Valor).toFixed(2).replace('.', ',')}`
-      );
-    });
-
-    doc.moveDown();
-    doc.fontSize(12).text(`Total de lançamentos: ${rows.length}`);
-    doc.fontSize(12).text(`Total em reais: R$ ${totalGeral.toFixed(2).replace('.', ',')}`);
-    doc.end();
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('Erro ao gerar PDF.');
   }
 });
 
