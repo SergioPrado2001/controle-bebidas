@@ -12,7 +12,7 @@ const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
 dayjs.extend(utc);
 dayjs.extend(timezone);
-dayjs.tz.setDefault('America/Sao_Paulo');
+dayjs.tz.setDefault('America/Cuiaba');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -569,7 +569,7 @@ const templates = {
           <tbody>
             <% withdrawals.forEach(item => { %>
               <tr>
-                <td><%= dayjs(item.created_at).tz('America/Sao_Paulo').format('DD/MM/YYYY HH:mm:ss') %></td>
+                <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
                 <td><%= item.item_name %></td>
                 <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
               </tr>
@@ -717,7 +717,7 @@ const templates = {
           <tbody>
             <% withdrawalsAll.forEach(item => { %>
               <tr>
-                <td><%= dayjs(item.created_at).tz('America/Sao_Paulo').format('DD/MM/YYYY HH:mm:ss') %></td>
+                <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
                 <td><%= item.name %></td>
                 <td><%= item.username %></td>
                 <td><%= item.item_name %></td>
@@ -800,7 +800,7 @@ async function initDB() {
       item_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
       item_name TEXT NOT NULL,
       item_price NUMERIC(10,2) NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Sao_Paulo')
+      created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
   `);
 
@@ -1349,7 +1349,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
         u.username AS "Usuario",
         w.item_name AS "Item",
         w.item_price AS "Valor",
-        TO_CHAR(w.created_at AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY HH24:MI:SS') AS "DataHora"
+        TO_CHAR(w.created_at AT TIME ZONE 'America/Cuiaba', 'DD/MM/YYYY HH24:MI:SS') AS "DataHora"
       FROM withdrawals w
       INNER JOIN users u ON u.id = w.user_id
       WHERE w.created_at >= $1 AND w.created_at < $2
@@ -1473,7 +1473,7 @@ app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
     rows.forEach((row, index) => {
       totalGeral += Number(row.Valor || 0);
       doc.fontSize(10).text(
-        `${index + 1}. ${dayjs(row.DataHora).tz('America/Sao_Paulo').format('DD/MM/YYYY HH:mm:ss')} | ${row.Colaborador} | ${row.Usuario} | ${row.Item} | R$ ${Number(row.Valor).toFixed(2).replace('.', ',')}`
+        `${index + 1}. ${dayjs(row.DataHora).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss')} | ${row.Colaborador} | ${row.Usuario} | ${row.Item} | R$ ${Number(row.Valor).toFixed(2).replace('.', ',')}`
       );
     });
 
