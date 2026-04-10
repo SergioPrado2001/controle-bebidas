@@ -676,8 +676,8 @@ const templates = {
           <span id="cart-total-value">R$ 0,00</span>
         </div>
         <button type="button" id="btn-confirmar" style="display:none;" onclick="confirmarRetirada()">
-          Confirmar retirada
-        </button>
+  Marcar retirada
+</button>
       </div>
 
       <div class="card">
@@ -930,165 +930,174 @@ const templates = {
 
   <!-- Script do carrinho (para todos os usuários) -->
   <script>
-    // ===== SISTEMA DE CARRINHO =====
-    var cart = {};
+  var cart = {};
 
-    function addToCart(el) {
-      if (el.classList.contains('unavailable')) return;
-      var id = el.dataset.id;
-      var name = el.dataset.name;
-      var price = parseFloat(el.dataset.price);
-      var stock = parseInt(el.dataset.stock);
+  function addToCart(el) {
+    if (!el || el.classList.contains('unavailable')) return;
 
-      if (!cart[id]) {
-        cart[id] = { id: id, name: name, price: price, stock: stock, qty: 0 };
-      }
+    var id = el.dataset.id;
+    var name = el.dataset.name;
+    var price = parseFloat(el.dataset.price || '0');
+    var stock = parseInt(el.dataset.stock || '0');
 
+    if (!id || stock <= 0) return;
+
+    if (!cart[id]) {
+      cart[id] = {
+        id: id,
+        name: name,
+        price: price,
+        stock: stock,
+        qty: 1
+      };
+    } else {
       if (cart[id].qty >= cart[id].stock) {
-        alert('Quantidade m\u00e1xima dispon\u00edvel: ' + cart[id].stock);
+        alert('Quantidade máxima disponível: ' + cart[id].stock);
         return;
       }
-
       cart[id].qty += 1;
-      renderCart();
     }
 
-    function changeQty(id, delta) {
-      if (!cart[id]) return;
-      cart[id].qty += delta;
-      if (cart[id].qty <= 0) {
-        delete cart[id];
-      } else if (cart[id].qty > cart[id].stock) {
-        cart[id].qty = cart[id].stock;
-        alert('Quantidade m\u00e1xima dispon\u00edvel: ' + cart[id].stock);
-      }
-      renderCart();
-    }
+    renderCart();
+  }
 
-    function removeFromCart(id) {
+  function changeQty(id, delta) {
+    if (!cart[id]) return;
+
+    cart[id].qty += delta;
+
+    if (cart[id].qty <= 0) {
       delete cart[id];
-      renderCart();
+    } else if (cart[id].qty > cart[id].stock) {
+      cart[id].qty = cart[id].stock;
+      alert('Quantidade máxima disponível: ' + cart[id].stock);
     }
 
-    // Adicionar event listeners aos cards clicaveis
-    document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
-        card.addEventListener('click', function() {
-          addToCart(this);
-        });
-      });
+    renderCart();
+  }
+
+  function removeFromCart(id) {
+    if (!cart[id]) return;
+    delete cart[id];
+    renderCart();
+  }
+
+  function renderCart() {
+    var container = document.getElementById('cart-items');
+    var totalDiv = document.getElementById('cart-total');
+    var totalValue = document.getElementById('cart-total-value');
+    var btnConfirmar = document.getElementById('btn-confirmar');
+
+    if (!container || !totalDiv || !totalValue || !btnConfirmar) return;
+
+    var keys = Object.keys(cart);
+
+    document.querySelectorAll('.info.clickable').forEach(function(card) {
+      var badge = card.querySelector('.badge-cart');
+      if (badge) badge.remove();
+      card.classList.remove('selected');
+
+      var id = card.dataset.id;
+      if (cart[id]) {
+        card.classList.add('selected');
+        var newBadge = document.createElement('div');
+        newBadge.className = 'badge-cart';
+        newBadge.textContent = cart[id].qty;
+        card.appendChild(newBadge);
+      }
     });
 
-    function renderCart() {
-      var container = document.getElementById('cart-items');
-      var emptyMsg = document.getElementById('cart-empty');
-      var totalDiv = document.getElementById('cart-total');
-      var totalValue = document.getElementById('cart-total-value');
-      var btnConfirmar = document.getElementById('btn-confirmar');
+    if (keys.length === 0) {
+      container.innerHTML = '<div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>';
+      totalDiv.style.display = 'none';
+      btnConfirmar.style.display = 'none';
+      return;
+    }
 
-      var keys = Object.keys(cart);
+    var html = '';
+    var total = 0;
+    var totalItens = 0;
 
-      // Atualizar badges nos cards
-      document.querySelectorAll('.info.clickable').forEach(function(card) {
-        var existingBadge = card.querySelector('.badge-cart');
-        if (existingBadge) existingBadge.remove();
-        card.classList.remove('selected');
+    keys.forEach(function(id) {
+      var item = cart[id];
+      var subtotal = item.qty * item.price;
+      total += subtotal;
+      totalItens += item.qty;
 
-        var cid = card.dataset.id;
-        if (cart[cid] && cart[cid].qty > 0) {
-          card.classList.add('selected');
-          var badge = document.createElement('div');
-          badge.className = 'badge-cart';
-          badge.textContent = cart[cid].qty;
-          card.appendChild(badge);
-        }
+      html += `
+        <div class="cart-item">
+          <div class="cart-item-info">
+            <div class="cart-item-name">${item.name}</div>
+            <div class="cart-item-price">
+              R$ ${item.price.toFixed(2).replace('.', ',')} x ${item.qty} = R$ ${subtotal.toFixed(2).replace('.', ',')}
+            </div>
+          </div>
+          <div class="cart-qty">
+            <button type="button" onclick="changeQty('${id}', -1)">-</button>
+            <span>${item.qty}</span>
+            <button type="button" onclick="changeQty('${id}', 1)">+</button>
+          </div>
+          <button type="button" class="btn-remove" onclick="removeFromCart('${id}')">X</button>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+    totalDiv.style.display = 'flex';
+    totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+    btnConfirmar.style.display = 'block';
+    btnConfirmar.textContent = 'Marcar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
+  }
+
+  function confirmarRetirada() {
+    var keys = Object.keys(cart);
+    if (keys.length === 0) {
+      alert('Adicione pelo menos um produto no carrinho.');
+      return;
+    }
+
+    var items = [];
+    var resumo = '';
+
+    keys.forEach(function(id) {
+      items.push({
+        item_id: parseInt(id),
+        qty: cart[id].qty
       });
+      resumo += cart[id].name + ' x' + cart[id].qty + '\n';
+    });
 
-      if (keys.length === 0) {
-        container.innerHTML = '<div class="cart-empty">Seu carrinho est\u00e1 vazio. Clique em um produto para adicionar.</div>';
-        totalDiv.style.display = 'none';
-        btnConfirmar.style.display = 'none';
-        return;
+    if (!confirm('Confirmar retirada?\n\n' + resumo)) return;
+
+    fetch('/withdraw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.success) {
+        alert(data.message || 'Retirada registrada com sucesso!');
+        cart = {};
+        renderCart();
+        window.location.reload();
+      } else {
+        alert(data.message || 'Erro ao registrar retirada.');
       }
+    })
+    .catch(function() {
+      alert('Erro de conexão. Tente novamente.');
+    });
+  }
 
-      var html = '';
-      var total = 0;
-      var totalItens = 0;
-
-      keys.forEach(function(id) {
-        var item = cart[id];
-        var subtotal = item.qty * item.price;
-        total += subtotal;
-        totalItens += item.qty;
-
-        html += '<div class="cart-item">';
-        html += '  <div class="cart-item-info">';
-        html += '    <div class="cart-item-name">' + item.name + '</div>';
-        html += '    <div class="cart-item-price">R$ ' + item.price.toFixed(2).replace('.', ',') + ' x ' + item.qty + ' = R$ ' + subtotal.toFixed(2).replace('.', ',') + '</div>';
-        html += '  </div>';
-        html += '  <div class="cart-qty">';
-        html += '    <button type="button" onclick="changeQty(\'' + id + '\', -1)">-</button>';
-        html += '    <span>' + item.qty + '</span>';
-        html += '    <button type="button" onclick="changeQty(\'' + id + '\', 1)">+</button>';
-        html += '  </div>';
-        html += '  <button type="button" class="btn-remove" onclick="removeFromCart(\'' + id + '\')" title="Remover">X</button>';
-        html += '</div>';
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
+      card.addEventListener('click', function() {
+        addToCart(card);
       });
-
-      container.innerHTML = html;
-      totalDiv.style.display = 'flex';
-      totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
-      btnConfirmar.style.display = 'block';
-      btnConfirmar.textContent = 'Confirmar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
-    }
-
-    function confirmarRetirada() {
-      var keys = Object.keys(cart);
-      if (keys.length === 0) return;
-
-      var items = [];
-      var resumo = '';
-      keys.forEach(function(id) {
-        var item = cart[id];
-        items.push({ item_id: parseInt(id), qty: item.qty });
-        resumo += item.name + ' x' + item.qty + '\n';
-      });
-
-      if (!confirm('Confirmar retirada?\n\n' + resumo)) return;
-
-      fetch('/withdraw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: items })
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.success) {
-          cart = {};
-          renderCart();
-          alert(data.message || 'Retirada registrada com sucesso!');
-          window.location.reload();
-        } else {
-          alert(data.message || 'Erro ao registrar retirada.');
-        }
-      })
-      .catch(function() {
-        alert('Erro de conex\u00e3o. Tente novamente.');
-      });
-    }
-
-    // CPF mask para admin
-    var cpfField = document.getElementById('cpf-admin');
-    if (cpfField) {
-      cpfField.addEventListener('input', function(e) {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-        else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
-        e.target.value = v;
-      });
-    }
-  </script>
+    });
+  });
+</script>
 </body>
 </html>
 `
