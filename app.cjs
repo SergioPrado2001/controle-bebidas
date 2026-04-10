@@ -618,7 +618,7 @@ const templates = {
                  data-name="<%= item.name %>"
                  data-price="<%= Number(item.price).toFixed(2) %>"
                  data-stock="<%= item.stock_quantity || 0 %>"
-                 onclick="addToCart(this)">
+                 data-clickable="true">
               <span class="pill">Produto</span>
               <% if (item.image_url) { %>
                 <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
@@ -928,18 +928,17 @@ const templates = {
     <% } %>
   </div>
 
+  <!-- Script do carrinho (para todos os usuários) -->
   <script>
     // ===== SISTEMA DE CARRINHO =====
     var cart = {};
 
     function addToCart(el) {
-      console.log('addToCart chamado', el);
       if (el.classList.contains('unavailable')) return;
       var id = el.dataset.id;
       var name = el.dataset.name;
       var price = parseFloat(el.dataset.price);
       var stock = parseInt(el.dataset.stock);
-      console.log('ID:', id, 'Name:', name, 'Price:', price, 'Stock:', stock);
 
       if (!cart[id]) {
         cart[id] = { id: id, name: name, price: price, stock: stock, qty: 0 };
@@ -970,6 +969,15 @@ const templates = {
       delete cart[id];
       renderCart();
     }
+
+    // Adicionar event listeners aos cards clicaveis
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
+        card.addEventListener('click', function() {
+          addToCart(this);
+        });
+      });
+    });
 
     function renderCart() {
       var container = document.getElementById('cart-items');
