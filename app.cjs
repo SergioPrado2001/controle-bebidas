@@ -235,10 +235,21 @@ const templates = {
 
     <form method="POST" action="/register">
       <input type="text" name="name" placeholder="Nome completo" required />
+      <input type="text" name="cpf" id="cpf-register" placeholder="CPF (000.000.000-00)" maxlength="14" required />
       <input type="text" name="username" placeholder="Usuário" required />
       <input type="password" name="password" placeholder="Senha" required />
       <button type="submit">Criar meu usuário</button>
     </form>
+
+    <script>
+      document.getElementById('cpf-register').addEventListener('input', function(e) {
+        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+        else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+        e.target.value = v;
+      });
+    </script>
 
     <p><a href="/">Voltar ao login</a></p>
   </div>
@@ -569,6 +580,7 @@ const templates = {
         <form method="POST" action="/admin/users">
           <div class="form-row">
             <div><label>Nome completo</label><br /><br /><input type="text" name="name" placeholder="Nome completo" required /></div>
+            <div><label>CPF</label><br /><br /><input type="text" name="cpf" id="cpf-admin" placeholder="000.000.000-00" maxlength="14" required /></div>
             <div><label>Usuário</label><br /><br /><input type="text" name="username" placeholder="usuario" required /></div>
             <div><label>Senha</label><br /><br /><input type="password" name="password" placeholder="Senha" required /></div>
             <div>
@@ -590,6 +602,7 @@ const templates = {
           <thead>
             <tr>
               <th>Nome</th>
+              <th>CPF</th>
               <th>Usuário</th>
               <th>Perfil</th>
             </tr>
@@ -598,6 +611,7 @@ const templates = {
             <% users.forEach(item => { %>
               <tr>
                 <td><%= item.name %></td>
+                <td><%= item.cpf || '-' %></td>
                 <td><%= item.username %></td>
                 <td><%= item.role %></td>
               </tr>
@@ -709,6 +723,18 @@ const templates = {
       </div>
     <% } %>
   </div>
+  <script>
+    var cpfField = document.getElementById('cpf-admin');
+    if (cpfField) {
+      cpfField.addEventListener('input', function(e) {
+        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+        else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+        e.target.value = v;
+      });
+    }
+  </script>
 </body>
 </html>
 `
@@ -724,9 +750,24 @@ async function initDB() {
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       username TEXT UNIQUE NOT NULL,
+      cpf TEXT UNIQUE,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
     )
+  `);
+
+  // Adicionar coluna cpf caso a tabela já exista sem ela
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'cpf'
+      ) THEN
+        ALTER TABLE users ADD COLUMN cpf TEXT UNIQUE;
+      END IF;
+    END
+    $$;
   `);
 
   await pool.query(`
@@ -847,22 +888,66 @@ app.get('/register', (req, res) => {
 });
 
 app.post('/register', async (req, res) => {
-  const { name, username, password } = req.body;
+  const { name, cpf, username, password } = req.body;
 
-  if (!name || !username || !password) {
+  if (!name || !cpf || !username || !password) {
     return res.render('register', {
       success: null,
-      error: 'Preencha todos os campos.'
+      error: 'Preencha todos os campos, incluindo o CPF.'
     });
   }
 
+  // Limpar CPF (só dígitos)
+  const cpfLimpo = cpf.replace(/\D/g, '');
+
+  if (cpfLimpo.length !== 11) {
+    return res.render('register', {
+      success: null,
+      error: 'CPF inválido. Informe os 11 dígitos.'
+    });
+  }
+
+  // Validar CPF (dígitos verificadores)
+  function validarCPF(c) {
+    if (/^(\d)\1{10}$/.test(c)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i);
+    let resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    if (resto !== Number(c[9])) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += Number(c[i]) * (11 - i);
+    resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    return resto === Number(c[10]);
+  }
+
+  if (!validarCPF(cpfLimpo)) {
+    return res.render('register', {
+      success: null,
+      error: 'CPF inválido. Verifique os dígitos informados.'
+    });
+  }
+
+  // Formatar CPF para salvar padronizado
+  const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
   try {
+    // Verificar se CPF já existe
+    const cpfExiste = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpfFormatado]);
+    if (cpfExiste.rows.length > 0) {
+      return res.render('register', {
+        success: null,
+        error: 'Já existe um usuário cadastrado com este CPF.'
+      });
+    }
+
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      `INSERT INTO users (name, username, password_hash, role)
-       VALUES ($1, $2, $3, 'employee')`,
-      [name.trim(), username.trim(), passwordHash]
+      `INSERT INTO users (name, cpf, username, password_hash, role)
+       VALUES ($1, $2, $3, $4, 'employee')`,
+      [name.trim(), cpfFormatado, username.trim(), passwordHash]
     );
 
     res.render('register', {
@@ -871,6 +956,12 @@ app.post('/register', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    if (err.code === '23505' && err.constraint && err.constraint.includes('cpf')) {
+      return res.render('register', {
+        success: null,
+        error: 'Já existe um usuário cadastrado com este CPF.'
+      });
+    }
     res.render('register', {
       success: null,
       error: 'Não foi possível criar o usuário. Esse login pode já existir.'
@@ -937,7 +1028,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     let users = [];
     if (user.role === 'admin') {
       const usersResult = await pool.query(`
-        SELECT id, name, username, role
+        SELECT id, name, username, cpf, role
         FROM users
         ORDER BY role ASC, name ASC
       `);
@@ -1019,10 +1110,10 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 });
 
 app.post('/admin/users', requireAdmin, async (req, res) => {
-  const { name, username, password, role } = req.body;
+  const { name, cpf, username, password, role } = req.body;
 
-  if (!name || !username || !password || !role) {
-    req.session.message = 'Preencha todos os campos do usuário.';
+  if (!name || !cpf || !username || !password || !role) {
+    req.session.message = 'Preencha todos os campos do usuário, incluindo o CPF.';
     return res.redirect('/dashboard');
   }
 
@@ -1031,18 +1122,60 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     return res.redirect('/dashboard');
   }
 
+  // Limpar CPF (só dígitos)
+  const cpfLimpo = cpf.replace(/\D/g, '');
+
+  if (cpfLimpo.length !== 11) {
+    req.session.message = 'CPF inválido. Informe os 11 dígitos.';
+    return res.redirect('/dashboard');
+  }
+
+  // Validar CPF (dígitos verificadores)
+  function validarCPF(c) {
+    if (/^(\d)\1{10}$/.test(c)) return false;
+    let soma = 0;
+    for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i);
+    let resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    if (resto !== Number(c[9])) return false;
+    soma = 0;
+    for (let i = 0; i < 10; i++) soma += Number(c[i]) * (11 - i);
+    resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    return resto === Number(c[10]);
+  }
+
+  if (!validarCPF(cpfLimpo)) {
+    req.session.message = 'CPF inválido. Verifique os dígitos informados.';
+    return res.redirect('/dashboard');
+  }
+
+  // Formatar CPF para salvar padronizado
+  const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
   try {
+    // Verificar se CPF já existe
+    const cpfExiste = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpfFormatado]);
+    if (cpfExiste.rows.length > 0) {
+      req.session.message = 'Já existe um usuário cadastrado com este CPF.';
+      return res.redirect('/dashboard');
+    }
+
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      `INSERT INTO users (name, username, password_hash, role) VALUES ($1, $2, $3, $4)`,
-      [name.trim(), username.trim(), passwordHash, role]
+      `INSERT INTO users (name, cpf, username, password_hash, role) VALUES ($1, $2, $3, $4, $5)`,
+      [name.trim(), cpfFormatado, username.trim(), passwordHash, role]
     );
 
     req.session.message = 'Usuário cadastrado com sucesso.';
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
+    if (err.code === '23505' && err.constraint && err.constraint.includes('cpf')) {
+      req.session.message = 'Já existe um usuário cadastrado com este CPF.';
+      return res.redirect('/dashboard');
+    }
     req.session.message = 'Não foi possível cadastrar o usuário.';
     res.redirect('/dashboard');
   }
