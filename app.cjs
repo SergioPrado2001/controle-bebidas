@@ -983,71 +983,65 @@ const templates = {
   }
 
   function renderCart() {
-    var container = document.getElementById('cart-items');
-    var totalDiv = document.getElementById('cart-total');
-    var totalValue = document.getElementById('cart-total-value');
-    var btnConfirmar = document.getElementById('btn-confirmar');
+  var container = document.getElementById('cart-items');
+  var totalDiv = document.getElementById('cart-total');
+  var totalValue = document.getElementById('cart-total-value');
+  var btnConfirmar = document.getElementById('btn-confirmar');
 
-    if (!container || !totalDiv || !totalValue || !btnConfirmar) return;
+  var keys = Object.keys(cart);
 
-    var keys = Object.keys(cart);
+  document.querySelectorAll('.info.clickable').forEach(function(card) {
+    var existingBadge = card.querySelector('.badge-cart');
+    if (existingBadge) existingBadge.remove();
+    card.classList.remove('selected');
 
-    document.querySelectorAll('.info.clickable').forEach(function(card) {
-      var badge = card.querySelector('.badge-cart');
-      if (badge) badge.remove();
-      card.classList.remove('selected');
-
-      var id = card.dataset.id;
-      if (cart[id]) {
-        card.classList.add('selected');
-        var newBadge = document.createElement('div');
-        newBadge.className = 'badge-cart';
-        newBadge.textContent = cart[id].qty;
-        card.appendChild(newBadge);
-      }
-    });
-
-    if (keys.length === 0) {
-      container.innerHTML = '<div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>';
-      totalDiv.style.display = 'none';
-      btnConfirmar.style.display = 'none';
-      return;
+    var cid = card.dataset.id;
+    if (cart[cid] && cart[cid].qty > 0) {
+      card.classList.add('selected');
+      var badge = document.createElement('div');
+      badge.className = 'badge-cart';
+      badge.textContent = cart[cid].qty;
+      card.appendChild(badge);
     }
+  });
 
-    var html = '';
-    var total = 0;
-    var totalItens = 0;
-
-    keys.forEach(function(id) {
-      var item = cart[id];
-      var subtotal = item.qty * item.price;
-      total += subtotal;
-      totalItens += item.qty;
-
-      html += `
-        <div class="cart-item">
-          <div class="cart-item-info">
-            <div class="cart-item-name">${item.name}</div>
-            <div class="cart-item-price">
-              R$ ${item.price.toFixed(2).replace('.', ',')} x ${item.qty} = R$ ${subtotal.toFixed(2).replace('.', ',')}
-            </div>
-          </div>
-          <div class="cart-qty">
-            <button type="button" onclick="changeQty('${id}', -1)">-</button>
-            <span>${item.qty}</span>
-            <button type="button" onclick="changeQty('${id}', 1)">+</button>
-          </div>
-          <button type="button" class="btn-remove" onclick="removeFromCart('${id}')">X</button>
-        </div>
-      `;
-    });
-
-    container.innerHTML = html;
-    totalDiv.style.display = 'flex';
-    totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
-    btnConfirmar.style.display = 'block';
-    btnConfirmar.textContent = 'Marcar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
+  if (keys.length === 0) {
+    container.innerHTML = '<div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>';
+    totalDiv.style.display = 'none';
+    btnConfirmar.style.display = 'none';
+    return;
   }
+
+  var html = '';
+  var total = 0;
+  var totalItens = 0;
+
+  keys.forEach(function(id) {
+    var item = cart[id];
+    var subtotal = item.qty * item.price;
+    total += subtotal;
+    totalItens += item.qty;
+
+    html += '<div class="cart-item">';
+    html += '  <div class="cart-item-info">';
+    html += '    <div class="cart-item-name">' + item.name + '</div>';
+    html += '    <div class="cart-item-price">R$ ' + item.price.toFixed(2).replace('.', ',') + ' x ' + item.qty + ' = R$ ' + subtotal.toFixed(2).replace('.', ',') + '</div>';
+    html += '  </div>';
+    html += '  <div class="cart-qty">';
+    html += '    <button type="button" onclick="changeQty(\'' + id + '\', -1)">-</button>';
+    html += '    <span>' + item.qty + '</span>';
+    html += '    <button type="button" onclick="changeQty(\'' + id + '\', 1)">+</button>';
+    html += '  </div>';
+    html += '  <button type="button" class="btn-remove" onclick="removeFromCart(\'' + id + '\')" title="Remover">X</button>';
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+  totalDiv.style.display = 'flex';
+  totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+  btnConfirmar.style.display = 'block';
+  btnConfirmar.textContent = 'Marcar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
+}
 
   function confirmarRetirada() {
     var keys = Object.keys(cart);
