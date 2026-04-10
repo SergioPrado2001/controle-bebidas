@@ -927,27 +927,20 @@ const templates = {
       </div>
     <% } %>
   </div>
-  <script>
-    var cpfField = document.getElementById('cpf-admin');
-    if (cpfField) {
-      cpfField.addEventListener('input', function(e) {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-        else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
-        e.target.value = v;
-      });
-    }
 
+  <!-- Script do carrinho (para todos os usuários) -->
+  <script>
     // ===== SISTEMA DE CARRINHO =====
     var cart = {};
 
     function addToCart(el) {
+      console.log('addToCart chamado', el);
       if (el.classList.contains('unavailable')) return;
       var id = el.dataset.id;
       var name = el.dataset.name;
       var price = parseFloat(el.dataset.price);
       var stock = parseInt(el.dataset.stock);
+      console.log('ID:', id, 'Name:', name, 'Price:', price, 'Stock:', stock);
 
       if (!cart[id]) {
         cart[id] = { id: id, name: name, price: price, stock: stock, qty: 0 };
@@ -1074,6 +1067,18 @@ const templates = {
       })
       .catch(function() {
         alert('Erro de conex\u00e3o. Tente novamente.');
+      });
+    }
+
+    // CPF mask para admin
+    var cpfField = document.getElementById('cpf-admin');
+    if (cpfField) {
+      cpfField.addEventListener('input', function(e) {
+        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+        else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+        e.target.value = v;
       });
     }
   </script>
