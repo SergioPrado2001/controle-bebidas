@@ -1182,7 +1182,7 @@ app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
 app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   const { month } = req.query;
 
-  if (!month || !/^\\d{4}-\\d{2}$/.test(month)) {
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return res.status(400).send('Informe o mês no formato YYYY-MM.');
   }
 
@@ -1248,7 +1248,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
 app.get('/reports/pdf', requireFinanceOrAdmin, async (req, res) => {
   const { month } = req.query;
 
-  if (!month || !/^\\d{4}-\\d{2}$/.test(month)) {
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return res.status(400).send('Informe o mês no formato YYYY-MM.');
   }
 
