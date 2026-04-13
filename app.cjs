@@ -637,11 +637,11 @@ const templates = {
                   <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
 
                   <% const estoque = Number(item.stock_quantity || 0); %>
-<% if (estoque <= 0) { %>
-  <div class="stock-box stock-zero">
-    INDISPONÍVEL
-  </div>
-<% } %>
+                  <% if (estoque <= 0) { %>
+                    <div class="stock-box stock-zero">
+                      INDISPONÍVEL
+                    </div>
+                  <% } %>
                 </div>
               <% }) %>
             </div>
@@ -707,6 +707,8 @@ const templates = {
               <% } %>
 
               <% if (user.role === 'admin') { %>
+                <div class="muted" style="margin-top:10px;">Posição: <%= item.sort_order %></div>
+
                 <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
                   <div class="form-row">
                     <div><input type="text" name="name" value="<%= item.name %>" required /></div>
@@ -718,6 +720,18 @@ const templates = {
                     <button type="submit">Salvar</button>
                   </div>
                 </form>
+
+                <div class="actions" style="margin-top:10px;">
+                  <form method="POST" action="/admin/products/<%= item.id %>/move" style="margin:0;">
+                    <input type="hidden" name="direction" value="up" />
+                    <button type="submit" class="btn-soft">Subir</button>
+                  </form>
+
+                  <form method="POST" action="/admin/products/<%= item.id %>/move" style="margin:0;">
+                    <input type="hidden" name="direction" value="down" />
+                    <button type="submit" class="btn-soft">Descer</button>
+                  </form>
+                </div>
 
                 <form method="POST" action="/admin/products/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este produto?');" style="margin-top:10px;">
                   <button type="submit" class="btn-danger">Excluir produto</button>
@@ -917,41 +931,42 @@ const templates = {
       </div>
 
       <div class="card">
-  <h2>Lançamentos recentes</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Data</th>
-        <th>Colaborador</th>
-        <th>Usuário</th>
-        <th>Item</th>
-        <th>Valor</th>
-        <% if (user.role === 'admin' || user.role === 'finance') { %>
-          <th>Ação</th>
-        <% } %>
-      </tr>
-    </thead>
-    <tbody>
-      <% withdrawalsAll.forEach(item => { %>
-        <tr>
-          <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
-          <td><%= item.name %></td>
-          <td><%= item.username %></td>
-          <td><%= item.item_name %></td>
-          <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
-          <% if (user.role === 'admin' || user.role === 'finance') { %>
-            <td>
-              <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
-                <button type="submit" class="btn-danger">Excluir</button>
-              </form>
-            </td>
-          <% } %>
-        </tr>
-      <% }) %>
-    </tbody>
-  </table>
-</div>
-<% } %>
+        <h2>Lançamentos recentes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Colaborador</th>
+              <th>Usuário</th>
+              <th>Item</th>
+              <th>Valor</th>
+              <% if (user.role === 'admin' || user.role === 'finance') { %>
+                <th>Ação</th>
+              <% } %>
+            </tr>
+          </thead>
+          <tbody>
+            <% withdrawalsAll.forEach(item => { %>
+              <tr>
+                <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
+                <td><%= item.name %></td>
+                <td><%= item.username %></td>
+                <td><%= item.item_name %></td>
+                <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+                <% if (user.role === 'admin' || user.role === 'finance') { %>
+                  <td>
+                    <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
+                      <button type="submit" class="btn-danger">Excluir</button>
+                    </form>
+                  </td>
+                <% } %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
   <script>
     var cart = {};
 
@@ -1168,8 +1183,35 @@ async function initDB() {
       name TEXT UNIQUE NOT NULL,
       price NUMERIC(10,2) NOT NULL,
       image_url TEXT,
-      stock_quantity INTEGER NOT NULL DEFAULT 0
+      stock_quantity INTEGER NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0
     )
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'products' AND column_name = 'sort_order'
+      ) THEN
+        ALTER TABLE products ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
+    WITH ordered AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY name ASC) AS rn
+      FROM products
+    )
+    UPDATE products p
+    SET sort_order = ordered.rn
+    FROM ordered
+    WHERE p.id = ordered.id
+      AND (p.sort_order IS NULL OR p.sort_order = 0)
   `);
 
   await pool.query(`
@@ -1388,9 +1430,9 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
   try {
     const productsResult = await pool.query(`
-      SELECT id, name, price, image_url, stock_quantity
+      SELECT id, name, price, image_url, stock_quantity, sort_order
       FROM products
-      ORDER BY name ASC
+      ORDER BY sort_order ASC, name ASC
     `);
 
     const products = productsResult.rows;
@@ -1673,7 +1715,7 @@ app.post('/admin/users/:id/delete', requireAdmin, async (req, res) => {
 
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
 
-    req.session.message = `Usuário "${targetUser.name}" excluído com sucesso.`;
+    req.session.message = `Usuário "\${targetUser.name}" excluído com sucesso.`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -1691,13 +1733,19 @@ app.post('/admin/products', requireAdmin, async (req, res) => {
   }
 
   try {
+    const orderResult = await pool.query(
+      `SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM products`
+    );
+    const nextOrder = Number(orderResult.rows[0].next_order || 1);
+
     await pool.query(
-      `INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)`,
+      `INSERT INTO products (name, price, image_url, stock_quantity, sort_order) VALUES ($1, $2, $3, $4, $5)`,
       [
         name.trim(),
         Number(price),
         image_url ? image_url.trim() : '',
         Number(stock_quantity || 0),
+        nextOrder,
       ]
     );
 
@@ -1740,6 +1788,75 @@ app.post('/admin/products/:id/update', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     req.session.message = 'Erro ao atualizar produto.';
+    res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/products/:id/move', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { direction } = req.body;
+
+  if (!['up', 'down'].includes(direction)) {
+    req.session.message = 'Direção inválida.';
+    return res.redirect('/dashboard');
+  }
+
+  try {
+    const currentResult = await pool.query(
+      `SELECT id, sort_order, name FROM products WHERE id = $1`,
+      [id]
+    );
+
+    const current = currentResult.rows[0];
+
+    if (!current) {
+      req.session.message = 'Produto não encontrado.';
+      return res.redirect('/dashboard');
+    }
+
+    const operator = direction === 'up' ? '<' : '>';
+    const orderBy = direction === 'up' ? 'DESC' : 'ASC';
+
+    const swapResult = await pool.query(
+      \`
+      SELECT id, sort_order, name
+      FROM products
+      WHERE sort_order \${operator} $1
+      ORDER BY sort_order \${orderBy}
+      LIMIT 1
+      \`,
+      [current.sort_order]
+    );
+
+    const target = swapResult.rows[0];
+
+    if (!target) {
+      req.session.message = direction === 'up'
+        ? 'Este produto já está no topo.'
+        : 'Este produto já está no final.';
+      return res.redirect('/dashboard');
+    }
+
+    await pool.query('BEGIN');
+
+    await pool.query(
+      `UPDATE products SET sort_order = $1 WHERE id = $2`,
+      [target.sort_order, current.id]
+    );
+
+    await pool.query(
+      `UPDATE products SET sort_order = $1 WHERE id = $2`,
+      [current.sort_order, target.id]
+    );
+
+    await pool.query('COMMIT');
+
+    req.session.message = \`Ordem atualizada: \${current.name}.\`;
+    res.redirect('/dashboard');
+  } catch (err) {
+    await pool.query('ROLLBACK').catch(() => {});
+    console.error(err);
+    req.session.message = 'Erro ao alterar a ordem do produto.';
     res.redirect('/dashboard');
   }
 });
@@ -1802,7 +1919,7 @@ app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
 
     await pool.query('COMMIT');
 
-    req.session.message = `Estoque atualizado: +${qty} ${prodName} (Custo: R$ ${totalCost.toFixed(2).replace('.', ',')})`;
+    req.session.message = \`Estoque atualizado: +\${qty} \${prodName} (Custo: R$ \${totalCost.toFixed(2).replace('.', ',')})\`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
@@ -1833,7 +1950,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   start = String(start || '').trim();
   end = String(end || '').trim();
 
-  if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+  if (!start || !end || !/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end)) {
     return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
   }
 
@@ -1864,7 +1981,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     );
     const stockRows = stockResult.rows;
 
-    const allProducts = await pool.query('SELECT name, price FROM products ORDER BY name ASC');
+    const allProducts = await pool.query('SELECT name, price FROM products ORDER BY sort_order ASC, name ASC');
     const precosVenda = {};
     for (const p of allProducts.rows) {
       precosVenda[p.name] = Number(p.price);
