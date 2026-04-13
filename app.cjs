@@ -1136,7 +1136,7 @@ for (const [fileName, content] of Object.entries(templates)) {
 }
 
 async function initDB() {
-  await pool.query(\`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1145,9 +1145,9 @@ async function initDB() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
     )
-  \`);
+  `);
 
-  await pool.query(\`
+  await pool.query(`
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -1158,9 +1158,9 @@ async function initDB() {
       END IF;
     END
     $$;
-  \`);
+  `);
 
-  await pool.query(\`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
       name TEXT UNIQUE NOT NULL,
@@ -1168,9 +1168,9 @@ async function initDB() {
       image_url TEXT,
       stock_quantity INTEGER NOT NULL DEFAULT 0
     )
-  \`);
+  `);
 
-  await pool.query(\`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS withdrawals (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1179,9 +1179,9 @@ async function initDB() {
       item_price NUMERIC(10,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
-  \`);
+  `);
 
-  await pool.query(\`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS stock_entries (
       id SERIAL PRIMARY KEY,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -1191,9 +1191,9 @@ async function initDB() {
       total_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
-  \`);
+  `);
 
-  await pool.query(\`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
       id SERIAL PRIMARY KEY,
       reference_month TEXT NOT NULL,
@@ -1203,44 +1203,44 @@ async function initDB() {
       uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
-  \`);
+  `);
 
   const adminPasswordHash = bcrypt.hashSync('GPMadmin26', 10);
   const financePasswordHash = bcrypt.hashSync('GPMfin26', 10);
 
   await pool.query(
-    \`
+    `
     INSERT INTO users (name, username, password_hash, role)
     VALUES ('Administrador', 'admin', $1, 'admin')
     ON CONFLICT (username) DO NOTHING
-    \`,
+    `,
     [adminPasswordHash]
   );
 
   await pool.query(
-    \`
+    `
     INSERT INTO users (name, username, password_hash, role)
     VALUES ('Financeiro', 'financeiro', $1, 'finance')
     ON CONFLICT (username) DO NOTHING
-    \`,
+    `,
     [financePasswordHash]
   );
 
   await pool.query(
-    \`
+    `
     UPDATE users
     SET password_hash = $1, role = 'admin', name = 'Administrador'
     WHERE username = 'admin'
-    \`,
+    `,
     [adminPasswordHash]
   );
 
   await pool.query(
-    \`
+    `
     UPDATE users
     SET password_hash = $1, role = 'finance', name = 'Financeiro'
     WHERE username = 'financeiro'
-    \`,
+    `,
     [financePasswordHash]
   );
 }
@@ -1273,7 +1273,7 @@ app.post('/login', async (req, res) => {
 
   try {
     const result = await pool.query(
-      \`SELECT * FROM users WHERE username = $1\`,
+      `SELECT * FROM users WHERE username = $1`,
       [username]
     );
 
@@ -1355,8 +1355,8 @@ app.post('/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      \`INSERT INTO users (name, cpf, username, password_hash, role)
-       VALUES ($1, $2, $3, $4, 'employee')\`,
+      `INSERT INTO users (name, cpf, username, password_hash, role)
+       VALUES ($1, $2, $3, $4, 'employee')`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash]
     );
 
@@ -1385,21 +1385,21 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   req.session.message = null;
 
   try {
-    const productsResult = await pool.query(\`
+    const productsResult = await pool.query(`
       SELECT id, name, price, image_url, stock_quantity
       FROM products
       ORDER BY name ASC
-    \`);
+    `);
 
     const products = productsResult.rows;
 
     if (user.role === 'employee') {
       const withdrawalsResult = await pool.query(
-        \`SELECT id, item_name, item_price, created_at
+        `SELECT id, item_name, item_price, created_at
          FROM withdrawals
          WHERE user_id = $1
          ORDER BY created_at DESC
-         LIMIT 20\`,
+         LIMIT 20`,
         [user.id]
       );
 
@@ -1428,15 +1428,15 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       );
     }
 
-    const withdrawalsAllResult = await pool.query(\`
+    const withdrawalsAllResult = await pool.query(`
       SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
       FROM withdrawals w
       INNER JOIN users u ON u.id = w.user_id
       ORDER BY w.created_at DESC
       LIMIT 100
-    \`);
+    `);
 
-    const summaryByUserResult = await pool.query(\`
+    const summaryByUserResult = await pool.query(`
       SELECT
         u.name,
         COUNT(w.id) AS total_items,
@@ -1446,15 +1446,15 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       WHERE u.role = 'employee'
       GROUP BY u.id, u.name
       ORDER BY total_value DESC, total_items DESC, u.name ASC
-    \`);
+    `);
 
     let users = [];
     if (user.role === 'admin') {
-      const usersResult = await pool.query(\`
+      const usersResult = await pool.query(`
         SELECT id, name, username, cpf, role
         FROM users
         ORDER BY role ASC, name ASC
-      \`);
+      `);
       users = usersResult.rows;
     }
 
@@ -1498,7 +1498,7 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
         if (!product) {
           await pool.query('ROLLBACK');
-          return res.json({ success: false, message: \`Produto ID \${cartItem.item_id} não encontrado.\` });
+          return res.json({ success: false, message: `Produto ID ${cartItem.item_id} não encontrado.` });
         }
 
         const estoqueAtual = Number(product.stock_quantity || 0);
@@ -1506,12 +1506,12 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
         if (estoqueAtual <= 0) {
           await pool.query('ROLLBACK');
-          return res.json({ success: false, message: \`\${product.name} está sem estoque.\` });
+          return res.json({ success: false, message: `${product.name} está sem estoque.` });
         }
 
         if (qtySolicitada > estoqueAtual) {
           await pool.query('ROLLBACK');
-          return res.json({ success: false, message: \`\${product.name} tem apenas \${estoqueAtual} unidade(s) em estoque.\` });
+          return res.json({ success: false, message: `${product.name} tem apenas ${estoqueAtual} unidade(s) em estoque.` });
         }
 
         for (let i = 0; i < qtySolicitada; i++) {
@@ -1527,13 +1527,13 @@ app.post('/withdraw', requireAuth, async (req, res) => {
         );
 
         totalItens += qtySolicitada;
-        resumo.push(\`\${product.name} x\${qtySolicitada}\`);
+        resumo.push(`${product.name} x${qtySolicitada}`);
       }
 
       await pool.query('COMMIT');
 
-      req.session.message = \`Retirada registrada: \${resumo.join(', ')} (\${totalItens} \${totalItens === 1 ? 'item' : 'itens'}).\`;
-      return res.json({ success: true, message: \`Retirada registrada com sucesso! \${totalItens} \${totalItens === 1 ? 'item' : 'itens'}.\` });
+      req.session.message = `Retirada registrada: ${resumo.join(', ')} (${totalItens} ${totalItens === 1 ? 'item' : 'itens'}).`;
+      return res.json({ success: true, message: `Retirada registrada com sucesso! ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}.` });
     } catch (err) {
       await pool.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -1570,7 +1570,7 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
       await pool.query('COMMIT');
 
-      req.session.message = \`Retirada registrada: \${product.name} - R$ \${Number(product.price).toFixed(2).replace('.', ',')}.\`;
+      req.session.message = `Retirada registrada: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
       return res.redirect('/dashboard');
     } catch (err) {
       await pool.query('ROLLBACK').catch(() => {});
@@ -1635,7 +1635,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      \`INSERT INTO users (name, cpf, username, password_hash, role) VALUES ($1, $2, $3, $4, $5)\`,
+      `INSERT INTO users (name, cpf, username, password_hash, role) VALUES ($1, $2, $3, $4, $5)`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash, role]
     );
 
@@ -1671,7 +1671,7 @@ app.post('/admin/users/:id/delete', requireAdmin, async (req, res) => {
 
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
 
-    req.session.message = \`Usuário "\${targetUser.name}" excluído com sucesso.\`;
+    req.session.message = `Usuário "${targetUser.name}" excluído com sucesso.`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -1690,7 +1690,7 @@ app.post('/admin/products', requireAdmin, async (req, res) => {
 
   try {
     await pool.query(
-      \`INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)\`,
+      `INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)`,
       [
         name.trim(),
         Number(price),
@@ -1719,11 +1719,11 @@ app.post('/admin/products/:id/update', requireAdmin, async (req, res) => {
 
   try {
     await pool.query(
-      \`
+      `
       UPDATE products
       SET name = $1, price = $2, image_url = $3, stock_quantity = $4
       WHERE id = $5
-      \`,
+      `,
       [
         name.trim(),
         Number(price),
@@ -1747,7 +1747,7 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
 
   try {
     const countResult = await pool.query(
-      \`SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = $1\`,
+      `SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = $1`,
       [id]
     );
 
@@ -1758,7 +1758,7 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
       return res.redirect('/dashboard');
     }
 
-    await pool.query(\`DELETE FROM products WHERE id = $1\`, [id]);
+    await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
 
     req.session.message = 'Produto excluído com sucesso.';
     res.redirect('/dashboard');
@@ -1788,19 +1788,19 @@ app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
     await pool.query('BEGIN');
 
     await pool.query(
-      \`UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2\`,
+      `UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2`,
       [qty, product_id]
     );
 
     await pool.query(
-      \`INSERT INTO stock_entries (product_id, product_name, quantity, unit_cost, total_cost)
-       VALUES ($1, $2, $3, $4, $5)\`,
+      `INSERT INTO stock_entries (product_id, product_name, quantity, unit_cost, total_cost)
+       VALUES ($1, $2, $3, $4, $5)`,
       [product_id, prodName, qty, cost, totalCost]
     );
 
     await pool.query('COMMIT');
 
-    req.session.message = \`Estoque atualizado: +\${qty} \${prodName} (Custo: R$ \${totalCost.toFixed(2).replace('.', ',')})\`;
+    req.session.message = `Estoque atualizado: +${qty} ${prodName} (Custo: R$ ${totalCost.toFixed(2).replace('.', ',')})`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
@@ -1814,7 +1814,7 @@ app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
-    await pool.query(\`DELETE FROM withdrawals WHERE id = $1\`, [id]);
+    await pool.query(`DELETE FROM withdrawals WHERE id = $1`, [id]);
 
     req.session.message = 'Lançamento excluído com sucesso.';
     res.redirect('/dashboard');
@@ -1837,24 +1837,24 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   }
 
   const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
-  const periodoLabel = \`\${dayjs(start).format('DD-MM-YYYY')}_a_\${dayjs(end).format('DD-MM-YYYY')}\`;
-  const periodoTitulo = \`\${dayjs(start).format('DD/MM/YYYY')} a \${dayjs(end).format('DD/MM/YYYY')}\`;
+  const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
+  const periodoTitulo = `${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}`;
 
   try {
     const result = await pool.query(
-      \`SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor"
+      `SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor"
        FROM withdrawals w INNER JOIN users u ON u.id = w.user_id
        WHERE w.created_at >= $1 AND w.created_at < $2
-       ORDER BY u.name ASC\`,
+       ORDER BY u.name ASC`,
       [start, endPlusOne]
     );
     const rows = result.rows;
 
     const stockResult = await pool.query(
-      \`SELECT product_name, SUM(quantity) AS total_entrada, SUM(total_cost) AS custo_total
+      `SELECT product_name, SUM(quantity) AS total_entrada, SUM(total_cost) AS custo_total
        FROM stock_entries
        WHERE created_at >= $1 AND created_at < $2
-       GROUP BY product_name ORDER BY product_name ASC\`,
+       GROUP BY product_name ORDER BY product_name ASC`,
       [start, endPlusOne]
     );
     const stockRows = stockResult.rows;
@@ -1916,7 +1916,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
 
     ws.mergeCells(1, 1, 1, totalCols);
     const cellTitulo = ws.getCell(1, 1);
-    cellTitulo.value = \`CONTROLE DE CONSUMO INTERNO PARA DESCONTO EM FOLHA - \${periodoTitulo}\`;
+    cellTitulo.value = `CONTROLE DE CONSUMO INTERNO PARA DESCONTO EM FOLHA - ${periodoTitulo}`;
     cellTitulo.font = fonteTitulo;
     cellTitulo.alignment = { horizontal: 'center', vertical: 'middle' };
     cellTitulo.fill = azulClaro;
@@ -1940,7 +1940,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       const col = colInicioQtd + i;
       ws.mergeCells(2, col, 3, col);
       setCellStyle(2, col, produtos[i].toUpperCase(), fonteNegrito, alinhaCentro, azulClaro);
-      setCellStyle(4, col, \`R$  \${precos[i].toFixed(2).replace('.', ',')}\`, fontePreco, alinhaCentro, azulClaro);
+      setCellStyle(4, col, `R$  ${precos[i].toFixed(2).replace('.', ',')}`, fontePreco, alinhaCentro, azulClaro);
     }
 
     if (numProdutos > 0) {
@@ -2020,7 +2020,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     const colsEstoque = 7;
     wsE.mergeCells(1, 1, 1, colsEstoque);
     const cellTituloE = wsE.getCell(1, 1);
-    cellTituloE.value = \`CONTROLE DE ESTOQUE - \${periodoTitulo}\`;
+    cellTituloE.value = `CONTROLE DE ESTOQUE - ${periodoTitulo}`;
     cellTituloE.font = fonteTitulo;
     cellTituloE.alignment = { horizontal: 'center', vertical: 'middle' };
     cellTituloE.fill = azulClaro;
@@ -2118,7 +2118,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     wsE.getColumn(6).width = 20;
     wsE.getColumn(7).width = 18;
 
-    const fileName = \`controle-consumo-\${periodoLabel}.xlsx\`;
+    const fileName = `controle-consumo-${periodoLabel}.xlsx`;
     const filePath = path.join(baseDir, fileName);
     await workbook.xlsx.writeFile(filePath);
 
@@ -2143,12 +2143,12 @@ app.post('/invoices/upload', requireFinanceOrAdmin, upload.single('invoice_file'
 
   try {
     await pool.query(
-      \`INSERT INTO invoices (reference_month, file_name, file_type, file_data, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5)\`,
+      `INSERT INTO invoices (reference_month, file_name, file_type, file_data, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5)`,
       [reference_month, file.originalname, file.mimetype, file.buffer, req.session.user.id]
     );
 
-    req.session.message = \`Nota fiscal "\${file.originalname}" enviada com sucesso para \${reference_month}.\`;
+    req.session.message = `Nota fiscal "${file.originalname}" enviada com sucesso para ${reference_month}.`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -2167,7 +2167,7 @@ app.get('/invoices/:id/view', requireFinanceOrAdmin, async (req, res) => {
     if (!invoice) return res.status(404).send('Nota fiscal não encontrada.');
 
     res.setHeader('Content-Type', invoice.file_type);
-    res.setHeader('Content-Disposition', \`inline; filename="\${invoice.file_name}"\`);
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.file_name}"`);
     res.send(invoice.file_data);
   } catch (err) {
     console.error(err);
@@ -2185,7 +2185,7 @@ app.get('/invoices/:id/download', requireFinanceOrAdmin, async (req, res) => {
     if (!invoice) return res.status(404).send('Nota fiscal não encontrada.');
 
     res.setHeader('Content-Type', invoice.file_type);
-    res.setHeader('Content-Disposition', \`attachment; filename="\${invoice.file_name}"\`);
+    res.setHeader('Content-Disposition', `attachment; filename="${invoice.file_name}"`);
     res.send(invoice.file_data);
   } catch (err) {
     console.error(err);
@@ -2207,7 +2207,7 @@ app.post('/invoices/:id/delete', requireFinanceOrAdmin, async (req, res) => {
 
     await pool.query('DELETE FROM invoices WHERE id = $1', [id]);
 
-    req.session.message = \`Nota fiscal "\${invoice.file_name}" excluída com sucesso.\`;
+    req.session.message = `Nota fiscal "${invoice.file_name}" excluída com sucesso.`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -2225,7 +2225,7 @@ app.get('/logout', (req, res) => {
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(\`Servidor rodando em http://0.0.0.0:\${PORT}\`);
+      console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
     });
   })
   .catch((err) => {
