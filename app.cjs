@@ -637,9 +637,11 @@ const templates = {
                   <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
 
                   <% const estoque = Number(item.stock_quantity || 0); %>
-                  <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
-                    <%= estoque <= 0 ? 'INDISPONÍVEL' : ('Estoque: ' + estoque) %>
-                  </div>
+<% if (estoque <= 0) { %>
+  <div class="stock-box stock-zero">
+    INDISPONÍVEL
+  </div>
+<% } %>
                 </div>
               <% }) %>
             </div>
