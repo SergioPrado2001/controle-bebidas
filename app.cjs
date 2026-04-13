@@ -1947,12 +1947,16 @@ app.post('/admin/withdrawals/:id/delete', requireFinanceOrAdmin, async (req, res
 app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   let { start, end } = req.query;
 
-  start = String(start || '').trim();
-  end = String(end || '').trim();
+// Se não vier data, define padrão automático
+if (!start || !end) {
+  start = dayjs().startOf('month').format('YYYY-MM-DD');
+  end = dayjs().format('YYYY-MM-DD');
+}
 
-  if (!start || !end || !/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end)) {
-    return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
-  }
+// Validação
+if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+  return res.status(400).send('Formato de data inválido.');
+}
 
   if (dayjs(end).isBefore(dayjs(start))) {
     return res.status(400).send('A data fim não pode ser anterior à data de início.');
