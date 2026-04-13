@@ -925,8 +925,13 @@ const templates = {
               <th>Colaborador</th>
               <th>Usuário</th>
               <th>Item</th>
-              <th>Valor</th>
-              <% if (user.role === 'admin') { %><th>Ação</th><% } %>
+              <% if (user.role === 'admin' || user.role === 'finance') { %>
+  <td>
+    <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
+      <button type="submit" class="btn-danger">Excluir</button>
+    </form>
+  </td>
+<% } %>
             </tr>
           </thead>
           <tbody>
@@ -1812,7 +1817,7 @@ app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
   }
 });
 
-app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
+app.post('/admin/withdrawals/:id/delete', requireFinanceOrAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
