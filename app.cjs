@@ -834,11 +834,11 @@ const templates = {
           <div class="form-row">
             <div>
               <label>Data início</label><br /><br />
-              <input type="date" name="start" value="<%= new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10) %>" required />
+              <input type="date" name="start" value="<%= dayjs().startOf('month').format('YYYY-MM-DD') %>" required />
             </div>
             <div>
               <label>Data fim</label><br /><br />
-              <input type="date" name="end" value="<%= new Date().toISOString().slice(0,10) %>" required />
+              <input type="date" name="end" value="<%= dayjs().format('YYYY-MM-DD') %>" required />
             </div>
             <div style="max-width:240px;">
               <label>&nbsp;</label><br /><br />
@@ -1828,9 +1828,12 @@ app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
 });
 
 app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
-  const { start, end } = req.query;
+  let { start, end } = req.query;
 
-  if (!start || !end || !/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end)) {
+  start = String(start || '').trim();
+  end = String(end || '').trim();
+
+  if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
     return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
   }
 
