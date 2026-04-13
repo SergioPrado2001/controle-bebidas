@@ -1172,8 +1172,8 @@ async function initDB() {
     )
   `);
 
-  const adminPasswordHash = bcrypt.hashSync('123456', 10);
-  const financePasswordHash = bcrypt.hashSync('123456', 10);
+  const adminPasswordHash = bcrypt.hashSync('GPMadmin26', 10);
+  const financePasswordHash = bcrypt.hashSync('GPMfin26', 10);
 
   await pool.query(
     `
