@@ -1715,7 +1715,7 @@ app.post('/admin/users/:id/delete', requireAdmin, async (req, res) => {
 
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
 
-    req.session.message = `Usuário "\${targetUser.name}" excluído com sucesso.`;
+    req.session.message = `Usuário "${targetUser.name}" excluído com sucesso.`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -1818,13 +1818,13 @@ app.post('/admin/products/:id/move', requireAdmin, async (req, res) => {
     const orderBy = direction === 'up' ? 'DESC' : 'ASC';
 
     const swapResult = await pool.query(
-      \`
+      `
       SELECT id, sort_order, name
       FROM products
-      WHERE sort_order \${operator} $1
-      ORDER BY sort_order \${orderBy}
+      WHERE sort_order ${operator} $1
+      ORDER BY sort_order ${orderBy}
       LIMIT 1
-      \`,
+      `,
       [current.sort_order]
     );
 
@@ -1851,7 +1851,7 @@ app.post('/admin/products/:id/move', requireAdmin, async (req, res) => {
 
     await pool.query('COMMIT');
 
-    req.session.message = \`Ordem atualizada: \${current.name}.\`;
+    req.session.message = `Ordem atualizada: ${current.name}.`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
@@ -1919,7 +1919,7 @@ app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
 
     await pool.query('COMMIT');
 
-    req.session.message = \`Estoque atualizado: +\${qty} \${prodName} (Custo: R$ \${totalCost.toFixed(2).replace('.', ',')})\`;
+    req.session.message = `Estoque atualizado: +${qty} ${prodName} (Custo: R$ ${totalCost.toFixed(2).replace('.', ',')})`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
