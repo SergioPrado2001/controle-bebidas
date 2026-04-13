@@ -951,7 +951,7 @@ const templates = {
     </tbody>
   </table>
 </div>
-
+<% } %>
   <script>
     var cart = {};
 
