@@ -1985,19 +1985,20 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
     );
     const stockRows = stockResult.rows;
 
-    const allProducts = await pool.query('SELECT name, price FROM products ORDER BY sort_order ASC, name ASC');
+        const allProducts = await pool.query(`
+      SELECT name, price
+      FROM products
+      ORDER BY sort_order ASC, name ASC
+    `);
+
+    const produtos = allProducts.rows.map(p => p.name);
+    const precos = allProducts.rows.map(p => Number(p.price));
+    const numProdutos = produtos.length;
+
     const precosVenda = {};
     for (const p of allProducts.rows) {
       precosVenda[p.name] = Number(p.price);
     }
-
-    const produtosMap = {};
-    for (const row of rows) {
-      if (!produtosMap[row.Item]) produtosMap[row.Item] = Number(row.Valor || 0);
-    }
-    const produtos = Object.keys(produtosMap).sort();
-    const precos = produtos.map(p => produtosMap[p]);
-    const numProdutos = produtos.length;
 
     const pessoas = {};
     for (const row of rows) {
