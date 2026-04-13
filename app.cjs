@@ -917,45 +917,40 @@ const templates = {
       </div>
 
       <div class="card">
-        <h2>Lançamentos recentes</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Colaborador</th>
-              <th>Usuário</th>
-              <th>Item</th>
-              <% if (user.role === 'admin' || user.role === 'finance') { %>
-  <td>
-    <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
-      <button type="submit" class="btn-danger">Excluir</button>
-    </form>
-  </td>
-<% } %>
-            </tr>
-          </thead>
-          <tbody>
-            <% withdrawalsAll.forEach(item => { %>
-              <tr>
-                <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
-                <td><%= item.name %></td>
-                <td><%= item.username %></td>
-                <td><%= item.item_name %></td>
-                <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
-                <% if (user.role === 'admin') { %>
-                  <td>
-                    <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
-                      <button type="submit" class="btn-danger">Excluir</button>
-                    </form>
-                  </td>
-                <% } %>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } %>
-  </div>
+  <h2>Lançamentos recentes</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Data</th>
+        <th>Colaborador</th>
+        <th>Usuário</th>
+        <th>Item</th>
+        <th>Valor</th>
+        <% if (user.role === 'admin' || user.role === 'finance') { %>
+          <th>Ação</th>
+        <% } %>
+      </tr>
+    </thead>
+    <tbody>
+      <% withdrawalsAll.forEach(item => { %>
+        <tr>
+          <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
+          <td><%= item.name %></td>
+          <td><%= item.username %></td>
+          <td><%= item.item_name %></td>
+          <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+          <% if (user.role === 'admin' || user.role === 'finance') { %>
+            <td>
+              <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
+                <button type="submit" class="btn-danger">Excluir</button>
+              </form>
+            </td>
+          <% } %>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
 
   <script>
     var cart = {};
