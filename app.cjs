@@ -140,7 +140,7 @@ const templates = {
       <div class="logo-wrap">
         <img src="/logo-empresa.jpg" alt="Logo da empresa" />
       </div>
-      <h1>Controle de Bebidas</h1>
+      <h1>Consumo de Bebidas</h1>
       <p class="subtitle">Login do sistema interno.</p>
     </div>
 
