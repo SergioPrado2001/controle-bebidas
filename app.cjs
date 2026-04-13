@@ -50,14 +50,13 @@ app.use(
 app.set('view engine', 'ejs');
 app.set('views', viewsDir);
 
-// Multer para upload de notas fiscais (armazena em mem\u00f3ria)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB m\u00e1ximo
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
     if (allowed.includes(file.mimetype)) cb(null, true);
-    else cb(new Error('Formato n\u00e3o permitido. Envie PDF, JPG, PNG ou WEBP.'));
+    else cb(new Error('Formato não permitido. Envie PDF, JPG, PNG ou WEBP.'));
   }
 });
 
@@ -260,10 +259,10 @@ const templates = {
 
     <script>
       document.getElementById('cpf-register').addEventListener('input', function(e) {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-        if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-        else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-        else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+        let v = e.target.value.replace(/\\D/g, '').slice(0, 11);
+        if (v.length > 9) v = v.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{1,2})/, '$1.$2.$3-$4');
+        else if (v.length > 6) v = v.replace(/(\\d{3})(\\d{3})(\\d{1,3})/, '$1.$2.$3');
+        else if (v.length > 3) v = v.replace(/(\\d{3})(\\d{1,3})/, '$1.$2');
         e.target.value = v;
       });
     </script>
@@ -459,7 +458,18 @@ const templates = {
     }
     a { text-decoration:none; color:inherit; }
 
-    /* Carrinho e cards clicáveis */
+    .employee-layout {
+      display:grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap:20px;
+      align-items:start;
+    }
+    @media (max-width: 980px) {
+      .employee-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .info.clickable {
       cursor:pointer;
       transition: transform .15s, box-shadow .15s, border-color .15s;
@@ -605,31 +615,80 @@ const templates = {
       </div>
     <% } %>
 
-    <div class="card">
-      <h2>Produtos cadastrados</h2>
-      <% if (user.role === 'employee') { %>
-        <p class="muted" style="margin-top:0;">Clique nos produtos para adicionar ao carrinho.</p>
-      <% } %>
-      <div class="grid">
-        <% products.forEach(item => { %>
-          <% if (user.role === 'employee') { %>
-            <div class="info clickable <%= Number(item.stock_quantity || 0) <= 0 ? 'unavailable' : '' %>"
-                 data-id="<%= item.id %>"
-                 data-name="<%= item.name %>"
-                 data-price="<%= Number(item.price).toFixed(2) %>"
-                 data-stock="<%= item.stock_quantity || 0 %>"
-                 data-clickable="true">
-              <span class="pill">Produto</span>
-              <% if (item.image_url) { %>
-                <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
-              <% } %>
-              <h3 style="margin:10px 0 0;"><%= item.name %></h3>
-              <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
-              <% if (Number(item.stock_quantity || 0) <= 0) { %>
-                <div class="stock-box stock-zero">INDISPON\u00cdVEL</div>
-              <% } %>
+    <% if (user.role === 'employee') { %>
+      <div class="employee-layout">
+        <div>
+          <div class="card">
+            <h2>Produtos cadastrados</h2>
+            <p class="muted" style="margin-top:0;">Clique nos produtos para adicionar ao carrinho.</p>
+            <div class="grid">
+              <% products.forEach(item => { %>
+                <div class="info clickable <%= Number(item.stock_quantity || 0) <= 0 ? 'unavailable' : '' %>"
+                     data-id="<%= item.id %>"
+                     data-name="<%= item.name %>"
+                     data-price="<%= Number(item.price).toFixed(2) %>"
+                     data-stock="<%= item.stock_quantity || 0 %>"
+                     data-clickable="true">
+                  <span class="pill">Produto</span>
+                  <% if (item.image_url) { %>
+                    <img src="<%= item.image_url %>" alt="<%= item.name %>" class="product-image" />
+                  <% } %>
+                  <h3 style="margin:10px 0 0;"><%= item.name %></h3>
+                  <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
+
+                  <% const estoque = Number(item.stock_quantity || 0); %>
+                  <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
+                    <%= estoque <= 0 ? 'INDISPONÍVEL' : ('Estoque: ' + estoque) %>
+                  </div>
+                </div>
+              <% }) %>
             </div>
-          <% } else { %>
+          </div>
+
+          <div class="card">
+            <h2>Minhas retiradas</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Item</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% withdrawals.forEach(item => { %>
+                  <tr>
+                    <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
+                    <td><%= item.item_name %></td>
+                    <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" id="cart-section">
+            <h2>Carrinho</h2>
+            <div id="cart-items">
+              <div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>
+            </div>
+            <div class="cart-total" id="cart-total" style="display:none;">
+              <span>Total:</span>
+              <span id="cart-total-value">R$ 0,00</span>
+            </div>
+            <button type="button" id="btn-confirmar" style="display:none;" onclick="confirmarRetirada()">
+              Marcar retirada
+            </button>
+          </div>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="card">
+        <h2>Produtos cadastrados</h2>
+        <div class="grid">
+          <% products.forEach(item => { %>
             <div class="info">
               <span class="pill">Produto</span>
               <% if (item.image_url) { %>
@@ -637,12 +696,14 @@ const templates = {
               <% } %>
               <h3 style="margin:10px 0 0;"><%= item.name %></h3>
               <div class="price">R$ <%= Number(item.price).toFixed(2).replace('.', ',') %></div>
+
               <% if (user.role === 'admin' || user.role === 'finance') { %>
                 <% const estoque = Number(item.stock_quantity || 0); %>
                 <div class="stock-box <%= estoque <= 0 ? 'stock-zero' : estoque <= 5 ? 'stock-low' : 'stock-ok' %>">
                   Estoque atual: <%= estoque %>
                 </div>
               <% } %>
+
               <% if (user.role === 'admin') { %>
                 <form method="POST" action="/admin/products/<%= item.id %>/update" style="margin-top:14px;">
                   <div class="form-row">
@@ -655,51 +716,14 @@ const templates = {
                     <button type="submit">Salvar</button>
                   </div>
                 </form>
+
                 <form method="POST" action="/admin/products/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este produto?');" style="margin-top:10px;">
                   <button type="submit" class="btn-danger">Excluir produto</button>
                 </form>
               <% } %>
             </div>
-          <% } %>
-        <% }) %>
-      </div>
-    </div>
-
-    <% if (user.role === 'employee') { %>
-      <div class="card" id="cart-section">
-        <h2>Carrinho</h2>
-        <div id="cart-items">
-          <div class="cart-empty" id="cart-empty">Seu carrinho est\u00e1 vazio. Clique em um produto para adicionar.</div>
+          <% }) %>
         </div>
-        <div class="cart-total" id="cart-total" style="display:none;">
-          <span>Total:</span>
-          <span id="cart-total-value">R$ 0,00</span>
-        </div>
-        <button type="button" id="btn-confirmar" style="display:none;" onclick="confirmarRetirada()">
-  Marcar retirada
-</button>
-      </div>
-
-      <div class="card">
-        <h2>Minhas retiradas</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Item</th>
-              <th>Valor</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% withdrawals.forEach(item => { %>
-              <tr>
-                <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
-                <td><%= item.item_name %></td>
-                <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
       </div>
     <% } %>
 
@@ -732,9 +756,9 @@ const templates = {
             <tr>
               <th>Nome</th>
               <th>CPF</th>
-              <th>Usu\u00e1rio</th>
+              <th>Usuário</th>
               <th>Perfil</th>
-              <th>A\u00e7\u00e3o</th>
+              <th>Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -746,7 +770,7 @@ const templates = {
                 <td><%= item.role %></td>
                 <td>
                   <% if (item.username !== 'admin' && item.username !== 'financeiro') { %>
-                    <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usu\u00e1rio ' + '<%= item.name %>' + '? Todos os lan\u00e7amentos dele ser\u00e3o removidos.')" style="margin:0;">
+                    <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usuário ' + '<%= item.name %>' + '? Todos os lançamentos dele serão removidos.')" style="margin:0;">
                       <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
                     </form>
                   <% } else { %>
@@ -801,9 +825,7 @@ const templates = {
           </div>
         </form>
       </div>
-    <% } %>
 
-    <% if (user.role === 'admin' || user.role === 'finance') { %>
       <div class="card">
         <h2>Relatórios</h2>
         <form method="GET" action="/reports/xlsx">
@@ -831,7 +853,7 @@ const templates = {
           <form method="POST" action="/invoices/upload" enctype="multipart/form-data" style="margin-bottom:20px;">
             <div class="form-row">
               <div>
-                <label>M\u00eas de refer\u00eancia</label><br /><br />
+                <label>Mês de referência</label><br /><br />
                 <input type="month" name="reference_month" required />
               </div>
               <div>
@@ -849,7 +871,7 @@ const templates = {
         <div style="margin-bottom:14px;">
           <form method="GET" action="/dashboard" style="display:inline-flex; gap:10px; align-items:end;">
             <div>
-              <label>Filtrar por m\u00eas</label><br /><br />
+              <label>Filtrar por mês</label><br /><br />
               <input type="month" name="invoice_month" value="<%= typeof invoiceMonth !== 'undefined' ? invoiceMonth : '' %>" />
             </div>
             <div><button type="submit">Filtrar</button></div>
@@ -860,7 +882,7 @@ const templates = {
           <table>
             <thead>
               <tr>
-                <th>M\u00eas Ref.</th>
+                <th>Mês Ref.</th>
                 <th>Arquivo</th>
                 <th>Enviado em</th>
                 <th>Visualizar</th>
@@ -888,12 +910,12 @@ const templates = {
             </tbody>
           </table>
         <% } else { %>
-          <p class="muted">Nenhuma nota fiscal encontrada<%= typeof invoiceMonth !== 'undefined' && invoiceMonth ? ' para o m\u00eas selecionado' : '' %>.</p>
+          <p class="muted">Nenhuma nota fiscal encontrada<%= typeof invoiceMonth !== 'undefined' && invoiceMonth ? ' para o mês selecionado' : '' %>.</p>
         <% } %>
       </div>
 
       <div class="card">
-        <h2>Lan\u00e7amentos recentes</h2>
+        <h2>Lançamentos recentes</h2>
         <table>
           <thead>
             <tr>
@@ -928,170 +950,182 @@ const templates = {
     <% } %>
   </div>
 
-  <!-- Script do carrinho (para todos os usuários) -->
   <script>
-  var cart = {};
+    var cart = {};
 
-  function addToCart(el) {
-    if (!el || el.classList.contains('unavailable')) return;
+    function addToCart(el) {
+      if (!el || el.classList.contains('unavailable')) return;
 
-    var id = el.dataset.id;
-    var name = el.dataset.name;
-    var price = parseFloat(el.dataset.price || '0');
-    var stock = parseInt(el.dataset.stock || '0');
+      var id = el.dataset.id;
+      var name = el.dataset.name;
+      var price = parseFloat(el.dataset.price || '0');
+      var stock = parseInt(el.dataset.stock || '0');
 
-    if (!id || stock <= 0) return;
+      if (!id || stock <= 0) return;
 
-    if (!cart[id]) {
-      cart[id] = {
-        id: id,
-        name: name,
-        price: price,
-        stock: stock,
-        qty: 1
-      };
-    } else {
-      if (cart[id].qty >= cart[id].stock) {
+      if (!cart[id]) {
+        cart[id] = {
+          id: id,
+          name: name,
+          price: price,
+          stock: stock,
+          qty: 1
+        };
+      } else {
+        if (cart[id].qty >= cart[id].stock) {
+          alert('Quantidade máxima disponível: ' + cart[id].stock);
+          return;
+        }
+        cart[id].qty += 1;
+      }
+
+      renderCart();
+    }
+
+    function changeQty(id, delta) {
+      if (!cart[id]) return;
+
+      cart[id].qty += delta;
+
+      if (cart[id].qty <= 0) {
+        delete cart[id];
+      } else if (cart[id].qty > cart[id].stock) {
+        cart[id].qty = cart[id].stock;
         alert('Quantidade máxima disponível: ' + cart[id].stock);
+      }
+
+      renderCart();
+    }
+
+    function removeFromCart(id) {
+      if (!cart[id]) return;
+      delete cart[id];
+      renderCart();
+    }
+
+    function renderCart() {
+      var container = document.getElementById('cart-items');
+      var totalDiv = document.getElementById('cart-total');
+      var totalValue = document.getElementById('cart-total-value');
+      var btnConfirmar = document.getElementById('btn-confirmar');
+
+      if (!container || !totalDiv || !totalValue || !btnConfirmar) return;
+
+      var keys = Object.keys(cart);
+
+      document.querySelectorAll('.info.clickable').forEach(function(card) {
+        var existingBadge = card.querySelector('.badge-cart');
+        if (existingBadge) existingBadge.remove();
+        card.classList.remove('selected');
+
+        var cid = card.dataset.id;
+        if (cart[cid] && cart[cid].qty > 0) {
+          card.classList.add('selected');
+          var badge = document.createElement('div');
+          badge.className = 'badge-cart';
+          badge.textContent = cart[cid].qty;
+          card.appendChild(badge);
+        }
+      });
+
+      if (keys.length === 0) {
+        container.innerHTML = '<div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>';
+        totalDiv.style.display = 'none';
+        btnConfirmar.style.display = 'none';
         return;
       }
-      cart[id].qty += 1;
-    }
 
-    renderCart();
-  }
+      var html = '';
+      var total = 0;
+      var totalItens = 0;
 
-  function changeQty(id, delta) {
-    if (!cart[id]) return;
+      keys.forEach(function(id) {
+        var item = cart[id];
+        var subtotal = item.qty * item.price;
+        total += subtotal;
+        totalItens += item.qty;
 
-    cart[id].qty += delta;
-
-    if (cart[id].qty <= 0) {
-      delete cart[id];
-    } else if (cart[id].qty > cart[id].stock) {
-      cart[id].qty = cart[id].stock;
-      alert('Quantidade máxima disponível: ' + cart[id].stock);
-    }
-
-    renderCart();
-  }
-
-  function removeFromCart(id) {
-    if (!cart[id]) return;
-    delete cart[id];
-    renderCart();
-  }
-
-  function renderCart() {
-  var container = document.getElementById('cart-items');
-  var totalDiv = document.getElementById('cart-total');
-  var totalValue = document.getElementById('cart-total-value');
-  var btnConfirmar = document.getElementById('btn-confirmar');
-
-  var keys = Object.keys(cart);
-
-  document.querySelectorAll('.info.clickable').forEach(function(card) {
-    var existingBadge = card.querySelector('.badge-cart');
-    if (existingBadge) existingBadge.remove();
-    card.classList.remove('selected');
-
-    var cid = card.dataset.id;
-    if (cart[cid] && cart[cid].qty > 0) {
-      card.classList.add('selected');
-      var badge = document.createElement('div');
-      badge.className = 'badge-cart';
-      badge.textContent = cart[cid].qty;
-      card.appendChild(badge);
-    }
-  });
-
-  if (keys.length === 0) {
-    container.innerHTML = '<div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>';
-    totalDiv.style.display = 'none';
-    btnConfirmar.style.display = 'none';
-    return;
-  }
-
-  var html = '';
-  var total = 0;
-  var totalItens = 0;
-
-  keys.forEach(function(id) {
-    var item = cart[id];
-    var subtotal = item.qty * item.price;
-    total += subtotal;
-    totalItens += item.qty;
-
-    html += '<div class="cart-item">';
-    html += '  <div class="cart-item-info">';
-    html += '    <div class="cart-item-name">' + item.name + '</div>';
-    html += '    <div class="cart-item-price">R$ ' + item.price.toFixed(2).replace('.', ',') + ' x ' + item.qty + ' = R$ ' + subtotal.toFixed(2).replace('.', ',') + '</div>';
-    html += '  </div>';
-    html += '  <div class="cart-qty">';
-    html += '    <button type="button" onclick="changeQty(\'' + id + '\', -1)">-</button>';
-    html += '    <span>' + item.qty + '</span>';
-    html += '    <button type="button" onclick="changeQty(\'' + id + '\', 1)">+</button>';
-    html += '  </div>';
-    html += '  <button type="button" class="btn-remove" onclick="removeFromCart(\'' + id + '\')" title="Remover">X</button>';
-    html += '</div>';
-  });
-
-  container.innerHTML = html;
-  totalDiv.style.display = 'flex';
-  totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
-  btnConfirmar.style.display = 'block';
-  btnConfirmar.textContent = 'Marcar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
-}
-
-  function confirmarRetirada() {
-    var keys = Object.keys(cart);
-    if (keys.length === 0) {
-      alert('Adicione pelo menos um produto no carrinho.');
-      return;
-    }
-
-    var items = [];
-    var resumo = '';
-
-    keys.forEach(function(id) {
-      items.push({
-        item_id: parseInt(id),
-        qty: cart[id].qty
+        html += '<div class="cart-item">';
+        html += '  <div class="cart-item-info">';
+        html += '    <div class="cart-item-name">' + item.name + '</div>';
+        html += '    <div class="cart-item-price">R$ ' + item.price.toFixed(2).replace('.', ',') + ' x ' + item.qty + ' = R$ ' + subtotal.toFixed(2).replace('.', ',') + '</div>';
+        html += '  </div>';
+        html += '  <div class="cart-qty">';
+        html += '    <button type="button" onclick="event.stopPropagation(); changeQty(\\'' + id + '\\', -1)">-</button>';
+        html += '    <span>' + item.qty + '</span>';
+        html += '    <button type="button" onclick="event.stopPropagation(); changeQty(\\'' + id + '\\', 1)">+</button>';
+        html += '  </div>';
+        html += '  <button type="button" class="btn-remove" onclick="event.stopPropagation(); removeFromCart(\\'' + id + '\\')" title="Remover">X</button>';
+        html += '</div>';
       });
-      resumo += cart[id].name + ' x' + cart[id].qty + '\n';
-    });
 
-    if (!confirm('Confirmar retirada?\n\n' + resumo)) return;
+      container.innerHTML = html;
+      totalDiv.style.display = 'flex';
+      totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
+      btnConfirmar.style.display = 'block';
+      btnConfirmar.textContent = 'Marcar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
+    }
 
-    fetch('/withdraw', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: items })
-    })
-    .then(function(res) { return res.json(); })
-    .then(function(data) {
-      if (data.success) {
-        alert(data.message || 'Retirada registrada com sucesso!');
-        cart = {};
-        renderCart();
-        window.location.reload();
-      } else {
-        alert(data.message || 'Erro ao registrar retirada.');
+    function confirmarRetirada() {
+      var keys = Object.keys(cart);
+      if (keys.length === 0) {
+        alert('Adicione pelo menos um produto no carrinho.');
+        return;
       }
-    })
-    .catch(function() {
-      alert('Erro de conexão. Tente novamente.');
-    });
-  }
 
-  document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
-      card.addEventListener('click', function() {
-        addToCart(card);
+      var items = [];
+      var resumo = '';
+
+      keys.forEach(function(id) {
+        items.push({
+          item_id: parseInt(id),
+          qty: cart[id].qty
+        });
+        resumo += cart[id].name + ' x' + cart[id].qty + '\\n';
       });
+
+      if (!confirm('Confirmar retirada?\\n\\n' + resumo)) return;
+
+      fetch('/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.success) {
+          alert(data.message || 'Retirada registrada com sucesso!');
+          cart = {};
+          renderCart();
+          window.location.reload();
+        } else {
+          alert(data.message || 'Erro ao registrar retirada.');
+        }
+      })
+      .catch(function() {
+        alert('Erro de conexão. Tente novamente.');
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
+        card.addEventListener('click', function() {
+          addToCart(card);
+        });
+      });
+
+      var cpfAdmin = document.getElementById('cpf-admin');
+      if (cpfAdmin) {
+        cpfAdmin.addEventListener('input', function(e) {
+          let v = e.target.value.replace(/\\D/g, '').slice(0, 11);
+          if (v.length > 9) v = v.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{1,2})/, '$1.$2.$3-$4');
+          else if (v.length > 6) v = v.replace(/(\\d{3})(\\d{3})(\\d{1,3})/, '$1.$2.$3');
+          else if (v.length > 3) v = v.replace(/(\\d{3})(\\d{1,3})/, '$1.$2');
+          e.target.value = v;
+        });
+      }
     });
-  });
-</script>
+  </script>
 </body>
 </html>
 `
@@ -1102,7 +1136,7 @@ for (const [fileName, content] of Object.entries(templates)) {
 }
 
 async function initDB() {
-  await pool.query(`
+  await pool.query(\`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1111,10 +1145,9 @@ async function initDB() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
     )
-  `);
+  \`);
 
-  // Adicionar coluna cpf caso a tabela já exista sem ela
-  await pool.query(`
+  await pool.query(\`
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -1125,9 +1158,9 @@ async function initDB() {
       END IF;
     END
     $$;
-  `);
+  \`);
 
-  await pool.query(`
+  await pool.query(\`
     CREATE TABLE IF NOT EXISTS products (
       id SERIAL PRIMARY KEY,
       name TEXT UNIQUE NOT NULL,
@@ -1135,9 +1168,9 @@ async function initDB() {
       image_url TEXT,
       stock_quantity INTEGER NOT NULL DEFAULT 0
     )
-  `);
+  \`);
 
-  await pool.query(`
+  await pool.query(\`
     CREATE TABLE IF NOT EXISTS withdrawals (
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1146,9 +1179,9 @@ async function initDB() {
       item_price NUMERIC(10,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
-  `);
+  \`);
 
-  await pool.query(`
+  await pool.query(\`
     CREATE TABLE IF NOT EXISTS stock_entries (
       id SERIAL PRIMARY KEY,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -1158,9 +1191,9 @@ async function initDB() {
       total_cost NUMERIC(10,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
-  `);
+  \`);
 
-  await pool.query(`
+  await pool.query(\`
     CREATE TABLE IF NOT EXISTS invoices (
       id SERIAL PRIMARY KEY,
       reference_month TEXT NOT NULL,
@@ -1170,44 +1203,44 @@ async function initDB() {
       uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
     )
-  `);
+  \`);
 
   const adminPasswordHash = bcrypt.hashSync('GPMadmin26', 10);
   const financePasswordHash = bcrypt.hashSync('GPMfin26', 10);
 
   await pool.query(
-    `
+    \`
     INSERT INTO users (name, username, password_hash, role)
     VALUES ('Administrador', 'admin', $1, 'admin')
     ON CONFLICT (username) DO NOTHING
-    `,
+    \`,
     [adminPasswordHash]
   );
 
   await pool.query(
-    `
+    \`
     INSERT INTO users (name, username, password_hash, role)
     VALUES ('Financeiro', 'financeiro', $1, 'finance')
     ON CONFLICT (username) DO NOTHING
-    `,
+    \`,
     [financePasswordHash]
   );
 
   await pool.query(
-    `
+    \`
     UPDATE users
     SET password_hash = $1, role = 'admin', name = 'Administrador'
     WHERE username = 'admin'
-    `,
+    \`,
     [adminPasswordHash]
   );
 
   await pool.query(
-    `
+    \`
     UPDATE users
     SET password_hash = $1, role = 'finance', name = 'Financeiro'
     WHERE username = 'financeiro'
-    `,
+    \`,
     [financePasswordHash]
   );
 }
@@ -1240,7 +1273,7 @@ app.post('/login', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT * FROM users WHERE username = $1`,
+      \`SELECT * FROM users WHERE username = $1\`,
       [username]
     );
 
@@ -1278,8 +1311,7 @@ app.post('/register', async (req, res) => {
     });
   }
 
-  // Limpar CPF (só dígitos)
-  const cpfLimpo = cpf.replace(/\D/g, '');
+  const cpfLimpo = cpf.replace(/\\D/g, '');
 
   if (cpfLimpo.length !== 11) {
     return res.render('register', {
@@ -1288,9 +1320,8 @@ app.post('/register', async (req, res) => {
     });
   }
 
-  // Validar CPF (dígitos verificadores)
   function validarCPF(c) {
-    if (/^(\d)\1{10}$/.test(c)) return false;
+    if (/^(\\d)\\1{10}$/.test(c)) return false;
     let soma = 0;
     for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i);
     let resto = (soma * 10) % 11;
@@ -1310,11 +1341,9 @@ app.post('/register', async (req, res) => {
     });
   }
 
-  // Formatar CPF para salvar padronizado
-  const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  const cpfFormatado = cpfLimpo.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');
 
   try {
-    // Verificar se CPF já existe
     const cpfExiste = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpfFormatado]);
     if (cpfExiste.rows.length > 0) {
       return res.render('register', {
@@ -1326,8 +1355,8 @@ app.post('/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      `INSERT INTO users (name, cpf, username, password_hash, role)
-       VALUES ($1, $2, $3, $4, 'employee')`,
+      \`INSERT INTO users (name, cpf, username, password_hash, role)
+       VALUES ($1, $2, $3, $4, 'employee')\`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash]
     );
 
@@ -1356,21 +1385,21 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   req.session.message = null;
 
   try {
-    const productsResult = await pool.query(`
+    const productsResult = await pool.query(\`
       SELECT id, name, price, image_url, stock_quantity
       FROM products
       ORDER BY name ASC
-    `);
+    \`);
 
     const products = productsResult.rows;
 
     if (user.role === 'employee') {
       const withdrawalsResult = await pool.query(
-        `SELECT id, item_name, item_price, created_at
+        \`SELECT id, item_name, item_price, created_at
          FROM withdrawals
          WHERE user_id = $1
          ORDER BY created_at DESC
-         LIMIT 20`,
+         LIMIT 20\`,
         [user.id]
       );
 
@@ -1386,7 +1415,6 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       });
     }
 
-    // Buscar notas fiscais (filtro opcional por m\u00eas)
     const invoiceMonth = req.query.invoice_month || '';
     let invoicesResult;
     if (invoiceMonth) {
@@ -1400,15 +1428,15 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       );
     }
 
-    const withdrawalsAllResult = await pool.query(`
+    const withdrawalsAllResult = await pool.query(\`
       SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
       FROM withdrawals w
       INNER JOIN users u ON u.id = w.user_id
       ORDER BY w.created_at DESC
       LIMIT 100
-    `);
+    \`);
 
-    const summaryByUserResult = await pool.query(`
+    const summaryByUserResult = await pool.query(\`
       SELECT
         u.name,
         COUNT(w.id) AS total_items,
@@ -1418,15 +1446,15 @@ app.get('/dashboard', requireAuth, async (req, res) => {
       WHERE u.role = 'employee'
       GROUP BY u.id, u.name
       ORDER BY total_value DESC, total_items DESC, u.name ASC
-    `);
+    \`);
 
     let users = [];
     if (user.role === 'admin') {
-      const usersResult = await pool.query(`
+      const usersResult = await pool.query(\`
         SELECT id, name, username, cpf, role
         FROM users
         ORDER BY role ASC, name ASC
-      `);
+      \`);
       users = usersResult.rows;
     }
 
@@ -1457,7 +1485,6 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
   const { items, item_id } = req.body;
 
-  // Suporte ao carrinho (m\u00faltiplos itens via JSON)
   if (items && Array.isArray(items) && items.length > 0) {
     try {
       await pool.query('BEGIN');
@@ -1471,18 +1498,23 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
         if (!product) {
           await pool.query('ROLLBACK');
-          return res.json({ success: false, message: `Produto ID ${cartItem.item_id} n\u00e3o encontrado.` });
+          return res.json({ success: false, message: \`Produto ID \${cartItem.item_id} não encontrado.\` });
         }
 
-        const qty = Math.min(parseInt(cartItem.qty) || 1, Number(product.stock_quantity));
+        const estoqueAtual = Number(product.stock_quantity || 0);
+        const qtySolicitada = parseInt(cartItem.qty) || 1;
 
-        if (qty <= 0) {
+        if (estoqueAtual <= 0) {
           await pool.query('ROLLBACK');
-          return res.json({ success: false, message: `${product.name} est\u00e1 sem estoque.` });
+          return res.json({ success: false, message: \`\${product.name} está sem estoque.\` });
         }
 
-        // Inserir uma retirada para cada unidade
-        for (let i = 0; i < qty; i++) {
+        if (qtySolicitada > estoqueAtual) {
+          await pool.query('ROLLBACK');
+          return res.json({ success: false, message: \`\${product.name} tem apenas \${estoqueAtual} unidade(s) em estoque.\` });
+        }
+
+        for (let i = 0; i < qtySolicitada; i++) {
           await pool.query(
             'INSERT INTO withdrawals (user_id, item_id, item_name, item_price) VALUES ($1, $2, $3, $4)',
             [user.id, product.id, product.name, product.price]
@@ -1491,17 +1523,17 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
         await pool.query(
           'UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2',
-          [qty, product.id]
+          [qtySolicitada, product.id]
         );
 
-        totalItens += qty;
-        resumo.push(`${product.name} x${qty}`);
+        totalItens += qtySolicitada;
+        resumo.push(\`\${product.name} x\${qtySolicitada}\`);
       }
 
       await pool.query('COMMIT');
 
-      req.session.message = `Retirada registrada: ${resumo.join(', ')} (${totalItens} ${totalItens === 1 ? 'item' : 'itens'}).`;
-      return res.json({ success: true, message: `Retirada registrada com sucesso! ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}.` });
+      req.session.message = \`Retirada registrada: \${resumo.join(', ')} (\${totalItens} \${totalItens === 1 ? 'item' : 'itens'}).\`;
+      return res.json({ success: true, message: \`Retirada registrada com sucesso! \${totalItens} \${totalItens === 1 ? 'item' : 'itens'}.\` });
     } catch (err) {
       await pool.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -1509,19 +1541,18 @@ app.post('/withdraw', requireAuth, async (req, res) => {
     }
   }
 
-  // Fallback: retirada individual (compatibilidade)
   if (item_id) {
     try {
       const productResult = await pool.query('SELECT * FROM products WHERE id = $1', [item_id]);
       const product = productResult.rows[0];
 
       if (!product) {
-        req.session.message = 'Produto n\u00e3o encontrado.';
+        req.session.message = 'Produto não encontrado.';
         return res.redirect('/dashboard');
       }
 
       if (Number(product.stock_quantity) <= 0) {
-        req.session.message = 'Este produto est\u00e1 sem estoque.';
+        req.session.message = 'Este produto está sem estoque.';
         return res.redirect('/dashboard');
       }
 
@@ -1539,7 +1570,7 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
       await pool.query('COMMIT');
 
-      req.session.message = `Retirada registrada: ${product.name} - R$ ${Number(product.price).toFixed(2).replace('.', ',')}.`;
+      req.session.message = \`Retirada registrada: \${product.name} - R$ \${Number(product.price).toFixed(2).replace('.', ',')}.\`;
       return res.redirect('/dashboard');
     } catch (err) {
       await pool.query('ROLLBACK').catch(() => {});
@@ -1566,17 +1597,15 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  // Limpar CPF (só dígitos)
-  const cpfLimpo = cpf.replace(/\D/g, '');
+  const cpfLimpo = cpf.replace(/\\D/g, '');
 
   if (cpfLimpo.length !== 11) {
     req.session.message = 'CPF inválido. Informe os 11 dígitos.';
     return res.redirect('/dashboard');
   }
 
-  // Validar CPF (dígitos verificadores)
   function validarCPF(c) {
-    if (/^(\d)\1{10}$/.test(c)) return false;
+    if (/^(\\d)\\1{10}$/.test(c)) return false;
     let soma = 0;
     for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i);
     let resto = (soma * 10) % 11;
@@ -1594,11 +1623,9 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  // Formatar CPF para salvar padronizado
-  const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  const cpfFormatado = cpfLimpo.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');
 
   try {
-    // Verificar se CPF já existe
     const cpfExiste = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpfFormatado]);
     if (cpfExiste.rows.length > 0) {
       req.session.message = 'Já existe um usuário cadastrado com este CPF.';
@@ -1608,7 +1635,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      `INSERT INTO users (name, cpf, username, password_hash, role) VALUES ($1, $2, $3, $4, $5)`,
+      \`INSERT INTO users (name, cpf, username, password_hash, role) VALUES ($1, $2, $3, $4, $5)\`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash, role]
     );
 
@@ -1629,28 +1656,26 @@ app.post('/admin/users/:id/delete', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
-    // Verificar se o usu\u00e1rio existe e n\u00e3o \u00e9 admin/financeiro fixo
     const userResult = await pool.query('SELECT username, name FROM users WHERE id = $1', [id]);
     const targetUser = userResult.rows[0];
 
     if (!targetUser) {
-      req.session.message = 'Usu\u00e1rio n\u00e3o encontrado.';
+      req.session.message = 'Usuário não encontrado.';
       return res.redirect('/dashboard');
     }
 
     if (targetUser.username === 'admin' || targetUser.username === 'financeiro') {
-      req.session.message = 'N\u00e3o \u00e9 poss\u00edvel excluir usu\u00e1rios fixos do sistema.';
+      req.session.message = 'Não é possível excluir usuários fixos do sistema.';
       return res.redirect('/dashboard');
     }
 
-    // Excluir usu\u00e1rio (withdrawals ser\u00e3o removidos por CASCADE)
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
 
-    req.session.message = `Usu\u00e1rio "${targetUser.name}" exclu\u00eddo com sucesso.`;
+    req.session.message = \`Usuário "\${targetUser.name}" excluído com sucesso.\`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
-    req.session.message = 'Erro ao excluir usu\u00e1rio.';
+    req.session.message = 'Erro ao excluir usuário.';
     res.redirect('/dashboard');
   }
 });
@@ -1665,7 +1690,7 @@ app.post('/admin/products', requireAdmin, async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)`,
+      \`INSERT INTO products (name, price, image_url, stock_quantity) VALUES ($1, $2, $3, $4)\`,
       [
         name.trim(),
         Number(price),
@@ -1694,11 +1719,11 @@ app.post('/admin/products/:id/update', requireAdmin, async (req, res) => {
 
   try {
     await pool.query(
-      `
+      \`
       UPDATE products
       SET name = $1, price = $2, image_url = $3, stock_quantity = $4
       WHERE id = $5
-      `,
+      \`,
       [
         name.trim(),
         Number(price),
@@ -1722,7 +1747,7 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
 
   try {
     const countResult = await pool.query(
-      `SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = $1`,
+      \`SELECT COUNT(*) AS total FROM withdrawals WHERE item_id = $1\`,
       [id]
     );
 
@@ -1733,7 +1758,7 @@ app.post('/admin/products/:id/delete', requireAdmin, async (req, res) => {
       return res.redirect('/dashboard');
     }
 
-    await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
+    await pool.query(\`DELETE FROM products WHERE id = $1\`, [id]);
 
     req.session.message = 'Produto excluído com sucesso.';
     res.redirect('/dashboard');
@@ -1748,7 +1773,7 @@ app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
   const { product_id, quantity, total_cost } = req.body;
 
   if (!product_id || !quantity || Number(quantity) <= 0) {
-    req.session.message = 'Informe um produto e uma quantidade v\u00e1lida.';
+    req.session.message = 'Informe um produto e uma quantidade válida.';
     return res.redirect('/dashboard');
   }
 
@@ -1757,28 +1782,25 @@ app.post('/admin/stock/add', requireFinanceOrAdmin, async (req, res) => {
   const cost = qty > 0 ? totalCost / qty : 0;
 
   try {
-    // Buscar nome do produto
     const prodResult = await pool.query('SELECT name FROM products WHERE id = $1', [product_id]);
     const prodName = prodResult.rows[0] ? prodResult.rows[0].name : 'Desconhecido';
 
     await pool.query('BEGIN');
 
-    // Atualizar estoque do produto
     await pool.query(
-      `UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2`,
+      \`UPDATE products SET stock_quantity = stock_quantity + $1 WHERE id = $2\`,
       [qty, product_id]
     );
 
-    // Registrar entrada no hist\u00f3rico
     await pool.query(
-      `INSERT INTO stock_entries (product_id, product_name, quantity, unit_cost, total_cost)
-       VALUES ($1, $2, $3, $4, $5)`,
+      \`INSERT INTO stock_entries (product_id, product_name, quantity, unit_cost, total_cost)
+       VALUES ($1, $2, $3, $4, $5)\`,
       [product_id, prodName, qty, cost, totalCost]
     );
 
     await pool.query('COMMIT');
 
-    req.session.message = `Estoque atualizado: +${qty} ${prodName} (Custo: R$ ${totalCost.toFixed(2).replace('.', ',')})`;
+    req.session.message = \`Estoque atualizado: +\${qty} \${prodName} (Custo: R$ \${totalCost.toFixed(2).replace('.', ',')})\`;
     res.redirect('/dashboard');
   } catch (err) {
     await pool.query('ROLLBACK').catch(() => {});
@@ -1792,7 +1814,7 @@ app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
-    await pool.query(`DELETE FROM withdrawals WHERE id = $1`, [id]);
+    await pool.query(\`DELETE FROM withdrawals WHERE id = $1\`, [id]);
 
     req.session.message = 'Lançamento excluído com sucesso.';
     res.redirect('/dashboard');
@@ -1806,47 +1828,43 @@ app.post('/admin/withdrawals/:id/delete', requireAdmin, async (req, res) => {
 app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   const { start, end } = req.query;
 
-  if (!start || !end || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-    return res.status(400).send('Informe a data de in\u00edcio e fim no formato YYYY-MM-DD.');
+  if (!start || !end || !/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end)) {
+    return res.status(400).send('Informe a data de início e fim no formato YYYY-MM-DD.');
   }
 
   if (dayjs(end).isBefore(dayjs(start))) {
-    return res.status(400).send('A data fim n\u00e3o pode ser anterior \u00e0 data de in\u00edcio.');
+    return res.status(400).send('A data fim não pode ser anterior à data de início.');
   }
 
   const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
-  const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
-  const periodoTitulo = `${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}`;
+  const periodoLabel = \`\${dayjs(start).format('DD-MM-YYYY')}_a_\${dayjs(end).format('DD-MM-YYYY')}\`;
+  const periodoTitulo = \`\${dayjs(start).format('DD/MM/YYYY')} a \${dayjs(end).format('DD/MM/YYYY')}\`;
 
   try {
-    // Buscar todos os pedidos do per\u00edodo
     const result = await pool.query(
-      `SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor"
+      \`SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor"
        FROM withdrawals w INNER JOIN users u ON u.id = w.user_id
        WHERE w.created_at >= $1 AND w.created_at < $2
-       ORDER BY u.name ASC`,
+       ORDER BY u.name ASC\`,
       [start, endPlusOne]
     );
     const rows = result.rows;
 
-    // Buscar entradas de estoque do per\u00edodo
     const stockResult = await pool.query(
-      `SELECT product_name, SUM(quantity) AS total_entrada, SUM(total_cost) AS custo_total
+      \`SELECT product_name, SUM(quantity) AS total_entrada, SUM(total_cost) AS custo_total
        FROM stock_entries
        WHERE created_at >= $1 AND created_at < $2
-       GROUP BY product_name ORDER BY product_name ASC`,
+       GROUP BY product_name ORDER BY product_name ASC\`,
       [start, endPlusOne]
     );
     const stockRows = stockResult.rows;
 
-    // Buscar pre\u00e7os de venda dos produtos
     const allProducts = await pool.query('SELECT name, price FROM products ORDER BY name ASC');
     const precosVenda = {};
     for (const p of allProducts.rows) {
       precosVenda[p.name] = Number(p.price);
     }
 
-    // Descobrir todos os produtos distintos e seus pre\u00e7os unit\u00e1rios
     const produtosMap = {};
     for (const row of rows) {
       if (!produtosMap[row.Item]) produtosMap[row.Item] = Number(row.Valor || 0);
@@ -1855,7 +1873,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     const precos = produtos.map(p => produtosMap[p]);
     const numProdutos = produtos.length;
 
-    // Agrupar por pessoa
     const pessoas = {};
     for (const row of rows) {
       if (!pessoas[row.Colaborador]) pessoas[row.Colaborador] = { usuario: row.Usuario, produtos: {} };
@@ -1864,7 +1881,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     }
     const pessoasOrdenadas = Object.keys(pessoas).sort();
 
-    // Vendas por produto (para aba estoque)
     const vendasPorProduto = {};
     for (const row of rows) {
       if (!vendasPorProduto[row.Item]) vendasPorProduto[row.Item] = { qtd: 0, receita: 0 };
@@ -1872,13 +1888,10 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       vendasPorProduto[row.Item].receita += Number(row.Valor || 0);
     }
 
-    // ===== GERAR EXCEL COM EXCELJS =====
     const workbook = new ExcelJS.Workbook();
 
-    // Estilos reutiliz\u00e1veis
     const azulClaro = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB8D4E8' } };
     const branco = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
-    const verdeCl = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
     const bordaFina = {
       top: { style: 'thin', color: { argb: 'FF888888' } },
       left: { style: 'thin', color: { argb: 'FF888888' } },
@@ -1893,28 +1906,22 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     const alinhaCentro = { horizontal: 'center', vertical: 'middle', wrapText: true };
     const alinhaEsquerda = { horizontal: 'left', vertical: 'middle', wrapText: true };
 
-    // ============================================================
-    // ABA 1: CONTROLE DE CONSUMO
-    // ============================================================
     const ws = workbook.addWorksheet('Controle de Consumo');
 
-    // Colunas: Qtde | Nome | C Custo | [qtd produtos...] | [total produtos...] | Total Produtos | Total R$
     const colInicioQtd = 4;
     const colInicioTotal = colInicioQtd + numProdutos;
     const colTotalProdutos = colInicioTotal + numProdutos;
     const colTotalRS = colTotalProdutos + 1;
     const totalCols = colTotalRS;
 
-    // LINHA 1: T\u00cdTULO
     ws.mergeCells(1, 1, 1, totalCols);
     const cellTitulo = ws.getCell(1, 1);
-    cellTitulo.value = `CONTROLE DE CONSUMO INTERNO PARA DESCONTO EM FOLHA - ${periodoTitulo}`;
+    cellTitulo.value = \`CONTROLE DE CONSUMO INTERNO PARA DESCONTO EM FOLHA - \${periodoTitulo}\`;
     cellTitulo.font = fonteTitulo;
     cellTitulo.alignment = { horizontal: 'center', vertical: 'middle' };
     cellTitulo.fill = azulClaro;
     ws.getRow(1).height = 30;
 
-    // LINHAS 2-4: CABE\u00c7ALHO
     ws.mergeCells(2, 1, 4, 1);
     ws.mergeCells(2, 2, 4, 2);
     ws.mergeCells(2, 3, 4, 3);
@@ -1933,27 +1940,25 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       const col = colInicioQtd + i;
       ws.mergeCells(2, col, 3, col);
       setCellStyle(2, col, produtos[i].toUpperCase(), fonteNegrito, alinhaCentro, azulClaro);
-      setCellStyle(4, col, `R$  ${precos[i].toFixed(2).replace('.', ',')}`, fontePreco, alinhaCentro, azulClaro);
+      setCellStyle(4, col, \`R$  \${precos[i].toFixed(2).replace('.', ',')}\`, fontePreco, alinhaCentro, azulClaro);
     }
 
-    // Cabe\u00e7alho TOTAL (produtos R$)
     if (numProdutos > 0) {
       ws.mergeCells(2, colInicioTotal, 2, colInicioTotal + numProdutos - 1);
       setCellStyle(2, colInicioTotal, 'TOTAL', { bold: true, size: 12, name: 'Arial', color: { argb: 'FFCC0000' } }, alinhaCentro, azulClaro);
     }
+
     for (let i = 0; i < numProdutos; i++) {
       const col = colInicioTotal + i;
       ws.mergeCells(3, col, 4, col);
       setCellStyle(3, col, produtos[i].toUpperCase(), fonteNegrito, alinhaCentro, azulClaro);
     }
 
-    // Cabe\u00e7alhos Total Produtos e Total R$
     ws.mergeCells(2, colTotalProdutos, 4, colTotalProdutos);
     setCellStyle(2, colTotalProdutos, 'TOTAL PRODUTOS', fonteTotalVerm, alinhaCentro, azulClaro);
     ws.mergeCells(2, colTotalRS, 4, colTotalRS);
     setCellStyle(2, colTotalRS, 'TOTAL R$', fonteTotalVerm, alinhaCentro, azulClaro);
 
-    // Bordas nas c\u00e9lulas merged
     for (let r = 3; r <= 4; r++) {
       for (let c = 1; c <= 3; c++) {
         ws.getCell(r, c).border = bordaFina;
@@ -1961,7 +1966,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       }
     }
 
-    // LINHAS DE DADOS
     let linhaAtual = 5;
     for (let p = 0; p < pessoasOrdenadas.length; p++) {
       const nome = pessoasOrdenadas[p];
@@ -1991,16 +1995,13 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
         if (totalProduto > 0) cell.numFmt = '#,##0.00';
       }
 
-      // Total Produtos
-      const cTP = setCellStyle(linhaAtual, colTotalProdutos, totalProdPessoa, fonteTotalVerm, alinhaCentro, fillLinha);
-      // Total R$
+      setCellStyle(linhaAtual, colTotalProdutos, totalProdPessoa, fonteTotalVerm, alinhaCentro, fillLinha);
       const cTR = setCellStyle(linhaAtual, colTotalRS, Number(totalRSPessoa.toFixed(2)), fonteTotalVerm, alinhaCentro, fillLinha);
       cTR.numFmt = '#,##0.00';
 
       linhaAtual++;
     }
 
-    // LARGURAS
     ws.getColumn(1).width = 6;
     ws.getColumn(2).width = 42;
     ws.getColumn(3).width = 20;
@@ -2014,25 +2015,18 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     ws.getRow(3).height = 22;
     ws.getRow(4).height = 20;
 
-    // ============================================================
-    // ABA 2: ESTOQUE
-    // ============================================================
     const wsE = workbook.addWorksheet('Estoque');
 
     const colsEstoque = 7;
-    // Colunas: Produto | Pre\u00e7o Venda | Qtd Entrada | Qtd Vendida | Custo Total | Receita Venda | Lucro
-
-    // LINHA 1: T\u00cdTULO
     wsE.mergeCells(1, 1, 1, colsEstoque);
     const cellTituloE = wsE.getCell(1, 1);
-    cellTituloE.value = `CONTROLE DE ESTOQUE - ${periodoTitulo}`;
+    cellTituloE.value = \`CONTROLE DE ESTOQUE - \${periodoTitulo}\`;
     cellTituloE.font = fonteTitulo;
     cellTituloE.alignment = { horizontal: 'center', vertical: 'middle' };
     cellTituloE.fill = azulClaro;
     wsE.getRow(1).height = 30;
 
-    // LINHA 2: CABE\u00c7ALHO
-    const cabEstoque = ['PRODUTO', 'PRE\u00c7O VENDA (R$)', 'QTD ENTRADA', 'QTD VENDIDA', 'CUSTO TOTAL (R$)', 'RECEITA VENDA (R$)', 'LUCRO (R$)'];
+    const cabEstoque = ['PRODUTO', 'PREÇO VENDA (R$)', 'QTD ENTRADA', 'QTD VENDIDA', 'CUSTO TOTAL (R$)', 'RECEITA VENDA (R$)', 'LUCRO (R$)'];
     for (let c = 0; c < cabEstoque.length; c++) {
       const cell = wsE.getCell(2, c + 1);
       cell.value = cabEstoque[c];
@@ -2043,7 +2037,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     }
     wsE.getRow(2).height = 28;
 
-    // Juntar dados de estoque e vendas por produto
     const todosProdutosEstoque = new Set();
     for (const s of stockRows) todosProdutosEstoque.add(s.product_name);
     for (const v of Object.keys(vendasPorProduto)) todosProdutosEstoque.add(v);
@@ -2097,7 +2090,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
       linhaE++;
     }
 
-    // LINHA TOTAL GERAL
     const fillTotal = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF9CC0DE' } };
     const setTot = (c, val, fmt) => {
       const cell = wsE.getCell(linhaE, c);
@@ -2118,7 +2110,6 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     const cellLucroTotal = setTot(7, Number(totalLucroGeral.toFixed(2)), '#,##0.00');
     cellLucroTotal.font = { bold: true, size: 11, name: 'Arial', color: { argb: totalLucroGeral >= 0 ? 'FF006100' : 'FFCC0000' } };
 
-    // LARGURAS ABA ESTOQUE
     wsE.getColumn(1).width = 35;
     wsE.getColumn(2).width = 18;
     wsE.getColumn(3).width = 16;
@@ -2127,8 +2118,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     wsE.getColumn(6).width = 20;
     wsE.getColumn(7).width = 18;
 
-    // ===== SALVAR E ENVIAR =====
-    const fileName = `controle-consumo-${periodoLabel}.xlsx`;
+    const fileName = \`controle-consumo-\${periodoLabel}.xlsx\`;
     const filePath = path.join(baseDir, fileName);
     await workbook.xlsx.writeFile(filePath);
 
@@ -2138,29 +2128,27 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Erro ao gerar relat\u00f3rio.');
+    res.status(500).send('Erro ao gerar relatório.');
   }
 });
-
-// ===== ROTAS DE NOTAS FISCAIS =====
 
 app.post('/invoices/upload', requireFinanceOrAdmin, upload.single('invoice_file'), async (req, res) => {
   const { reference_month } = req.body;
   const file = req.file;
 
   if (!reference_month || !file) {
-    req.session.message = 'Informe o m\u00eas de refer\u00eancia e selecione um arquivo.';
+    req.session.message = 'Informe o mês de referência e selecione um arquivo.';
     return res.redirect('/dashboard');
   }
 
   try {
     await pool.query(
-      `INSERT INTO invoices (reference_month, file_name, file_type, file_data, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5)`,
+      \`INSERT INTO invoices (reference_month, file_name, file_type, file_data, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5)\`,
       [reference_month, file.originalname, file.mimetype, file.buffer, req.session.user.id]
     );
 
-    req.session.message = `Nota fiscal "${file.originalname}" enviada com sucesso para ${reference_month}.`;
+    req.session.message = \`Nota fiscal "\${file.originalname}" enviada com sucesso para \${reference_month}.\`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -2176,10 +2164,10 @@ app.get('/invoices/:id/view', requireFinanceOrAdmin, async (req, res) => {
     const result = await pool.query('SELECT file_name, file_type, file_data FROM invoices WHERE id = $1', [id]);
     const invoice = result.rows[0];
 
-    if (!invoice) return res.status(404).send('Nota fiscal n\u00e3o encontrada.');
+    if (!invoice) return res.status(404).send('Nota fiscal não encontrada.');
 
     res.setHeader('Content-Type', invoice.file_type);
-    res.setHeader('Content-Disposition', `inline; filename="${invoice.file_name}"`);
+    res.setHeader('Content-Disposition', \`inline; filename="\${invoice.file_name}"\`);
     res.send(invoice.file_data);
   } catch (err) {
     console.error(err);
@@ -2194,10 +2182,10 @@ app.get('/invoices/:id/download', requireFinanceOrAdmin, async (req, res) => {
     const result = await pool.query('SELECT file_name, file_type, file_data FROM invoices WHERE id = $1', [id]);
     const invoice = result.rows[0];
 
-    if (!invoice) return res.status(404).send('Nota fiscal n\u00e3o encontrada.');
+    if (!invoice) return res.status(404).send('Nota fiscal não encontrada.');
 
     res.setHeader('Content-Type', invoice.file_type);
-    res.setHeader('Content-Disposition', `attachment; filename="${invoice.file_name}"`);
+    res.setHeader('Content-Disposition', \`attachment; filename="\${invoice.file_name}"\`);
     res.send(invoice.file_data);
   } catch (err) {
     console.error(err);
@@ -2213,13 +2201,13 @@ app.post('/invoices/:id/delete', requireFinanceOrAdmin, async (req, res) => {
     const invoice = result.rows[0];
 
     if (!invoice) {
-      req.session.message = 'Nota fiscal n\u00e3o encontrada.';
+      req.session.message = 'Nota fiscal não encontrada.';
       return res.redirect('/dashboard');
     }
 
     await pool.query('DELETE FROM invoices WHERE id = $1', [id]);
 
-    req.session.message = `Nota fiscal "${invoice.file_name}" exclu\u00edda com sucesso.`;
+    req.session.message = \`Nota fiscal "\${invoice.file_name}" excluída com sucesso.\`;
     res.redirect('/dashboard');
   } catch (err) {
     console.error(err);
@@ -2237,7 +2225,7 @@ app.get('/logout', (req, res) => {
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Servidor rodando em http://0.0.0.0:${PORT}`);
+      console.log(\`Servidor rodando em http://0.0.0.0:\${PORT}\`);
     });
   })
   .catch((err) => {
