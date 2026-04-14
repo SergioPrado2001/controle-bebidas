@@ -67,9 +67,6 @@ const templates = {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
   <title>Login</title>
   <style>
     :root {
@@ -84,7 +81,7 @@ const templates = {
     }
     * { box-sizing:border-box; }
     body {
-      font-family: 'Pacifico', cursive;
+      font-family: Arial, sans-serif;
       margin:0;
       min-height:100vh;
       background: radial-gradient(circle at top, #144a85 0%, #0a2342 32%, #051426 100%);
