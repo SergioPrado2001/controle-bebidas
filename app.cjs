@@ -119,9 +119,21 @@ const templates = {
       background:linear-gradient(135deg, var(--accent), var(--accent2));
       color:#fff; border:none; cursor:pointer; font-weight:700;
     }
+    .btn-face {
+      background:linear-gradient(135deg, #0d9b73, #21c58b);
+    }
     .msg {
       background:rgba(255,138,151,.15); color:#ffd8dd; padding:12px; border-radius:12px;
       margin-top:12px; border:1px solid rgba(255,138,151,.18);
+    }
+    .msg-ok {
+      background:rgba(37,193,140,.15);
+      color:#defff2;
+      padding:12px;
+      border-radius:12px;
+      margin-top:12px;
+      border:1px solid rgba(37,193,140,.18);
+      display:none;
     }
     .link {
       margin-top:18px;
@@ -132,7 +144,21 @@ const templates = {
       text-decoration:none;
       font-weight:700;
     }
+    video {
+      width:100%;
+      border-radius:16px;
+      margin-top:14px;
+      background:#000;
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .small {
+      font-size:13px;
+      color:var(--muted);
+      margin-top:10px;
+      line-height:1.5;
+    }
   </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 </head>
 <body>
   <div class="box">
@@ -148,16 +174,105 @@ const templates = {
       <div class="msg"><%= error %></div>
     <% } %>
 
+    <div id="msg-face" class="msg" style="display:none;"></div>
+    <div id="msg-face-ok" class="msg-ok"></div>
+
     <form method="POST" action="/login">
       <input type="text" name="username" placeholder="Usuário" required />
       <input type="password" name="password" placeholder="Senha" required />
-      <button type="submit">Entrar</button>
+      <button type="submit">Entrar com senha</button>
     </form>
+
+    <button type="button" class="btn-face" onclick="loginComRosto()">Entrar com reconhecimento facial</button>
+
+    <video id="video" autoplay muted playsinline></video>
+    <p class="small">Centralize o rosto, com boa iluminação, e aguarde a captura.</p>
 
     <div class="link">
       <a href="/register">Criar meu usuário</a>
     </div>
   </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const msgFace = document.getElementById('msg-face');
+    const msgFaceOk = document.getElementById('msg-face-ok');
+    let modelsLoaded = false;
+    let stream = null;
+
+    function showError(message) {
+      msgFace.style.display = 'block';
+      msgFace.textContent = message;
+      msgFaceOk.style.display = 'none';
+    }
+
+    function showSuccess(message) {
+      msgFaceOk.style.display = 'block';
+      msgFaceOk.textContent = message;
+      msgFace.style.display = 'none';
+    }
+
+    async function loadModels() {
+      if (modelsLoaded) return;
+      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      modelsLoaded = true;
+    }
+
+    async function startCamera() {
+      if (stream) return;
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 640, height: 480 },
+        audio: false
+      });
+      video.srcObject = stream;
+      await new Promise(resolve => {
+        video.onloadedmetadata = () => resolve();
+      });
+    }
+
+    async function capturarDescriptor() {
+      await loadModels();
+      await startCamera();
+
+      const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks(true)
+        .withFaceDescriptor();
+
+      if (!detection) {
+        throw new Error('Nenhum rosto encontrado. Tente novamente com melhor iluminação.');
+      }
+
+      return Array.from(detection.descriptor);
+    }
+
+    async function loginComRosto() {
+      try {
+        showSuccess('Preparando câmera...');
+        const descriptor = await capturarDescriptor();
+
+        const response = await fetch('/login-face', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descriptor })
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || 'Falha no login facial.');
+        }
+
+        showSuccess('Login facial reconhecido com sucesso.');
+        window.location.href = data.redirect || '/dashboard';
+      } catch (err) {
+        showError(err.message || 'Erro ao usar reconhecimento facial.');
+      }
+    }
+  </script>
 </body>
 </html>
 `,
@@ -687,6 +802,60 @@ const templates = {
         </div>
       </div>
     <% } else { %>
+    <div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h2 style="margin-bottom:6px;">Biometria facial</h2>
+      <p class="muted" style="margin:0;">
+        Cadastre seu rosto para entrar no sistema com mais praticidade.
+      </p>
+    </div>
+    <div id="face-status" class="pill">Verificando...</div>
+  </div>
+
+  <div id="face-msg" class="msg" style="display:none;margin-top:14px;"></div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:start;margin-top:18px;">
+    <div>
+      <div style="position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.02));padding:14px;">
+        <video
+          id="face-video"
+          autoplay
+          muted
+          playsinline
+          style="width:100%;display:block;border-radius:18px;background:#000;min-height:280px;object-fit:cover;">
+        </video>
+
+        <div style="position:absolute;inset:28px;border:2px dashed rgba(255,255,255,.35);border-radius:28px;pointer-events:none;"></div>
+      </div>
+
+      <p class="muted" style="margin:12px 0 0;line-height:1.5;">
+        Posicione o rosto no centro, com boa iluminação e sem óculos escuros.
+      </p>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button type="button" class="btn-pix" onclick="cadastrarFace()">
+        Cadastrar biometria
+      </button>
+
+      <button type="button" class="btn-soft" onclick="atualizarStatusFace()">
+        Atualizar status
+      </button>
+
+      <button type="button" class="btn-danger" onclick="removerFace()">
+        Remover biometria
+      </button>
+
+      <div class="info" style="margin-top:6px;">
+        <span class="pill">Dica</span>
+        <p class="muted" style="margin:10px 0 0;line-height:1.5;">
+          Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
       <div class="card">
         <h2>Produtos cadastrados</h2>
         <div class="grid">
@@ -774,9 +943,32 @@ const templates = {
               <th>CPF</th>
               <th>Usuário</th>
               <th>Perfil</th>
-              <th>Ação</th>
+              <th>Status</th>
+              <th>Ações</th>
             </tr>
           </thead>
+          <td>
+  <span class="pill" style="<%= item.is_active ? 'background:rgba(37,193,140,.18);color:#defff2;' : 'background:rgba(255,107,132,.16);color:#ffd8dd;' %>">
+    <%= item.is_active ? 'Ativo' : 'Inativo' %>
+  </span>
+</td>
+<td>
+  <div class="actions">
+    <% if (item.username !== 'admin' && item.username !== 'financeiro') { %>
+      <form method="POST" action="/admin/users/<%= item.id %>/toggle-active" style="margin:0;">
+        <button type="submit" class="<%= item.is_active ? 'btn-soft' : '' %>" style="padding:6px 12px; font-size:12px;">
+          <%= item.is_active ? 'Inativar' : 'Ativar' %>
+        </button>
+      </form>
+
+      <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usuário ' + '<%= item.name %>' + '? Todos os lançamentos dele serão removidos.')" style="margin:0;">
+        <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
+      </form>
+    <% } else { %>
+      -
+    <% } %>
+  </div>
+</td>
           <tbody>
             <% users.forEach(item => { %>
               <tr>
@@ -1125,23 +1317,165 @@ const templates = {
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-      document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
-        card.addEventListener('click', function() {
-          addToCart(card);
-        });
-      });
+  document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
+    card.addEventListener('click', function() {
+      addToCart(card);
+    });
+  });
 
-      var cpfAdmin = document.getElementById('cpf-admin');
-      if (cpfAdmin) {
-        cpfAdmin.addEventListener('input', function(e) {
-          let v = e.target.value.replace(/\\D/g, '').slice(0, 11);
-          if (v.length > 9) v = v.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{1,2})/, '$1.$2.$3-$4');
-          else if (v.length > 6) v = v.replace(/(\\d{3})(\\d{3})(\\d{1,3})/, '$1.$2.$3');
-          else if (v.length > 3) v = v.replace(/(\\d{3})(\\d{1,3})/, '$1.$2');
-          e.target.value = v;
+  var cpfAdmin = document.getElementById('cpf-admin');
+  if (cpfAdmin) {
+    cpfAdmin.addEventListener('input', function(e) {
+      let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+      if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+      else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+      else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+      e.target.value = v;
+    });
+  }
+
+  atualizarStatusFace();
+});
+        let faceModelsLoaded = false;
+    let faceStream = null;
+
+    async function loadFaceModels() {
+      if (faceModelsLoaded) return;
+      if (!window.faceapi) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/face-api.js';
+        script.defer = true;
+        document.head.appendChild(script);
+        await new Promise((resolve, reject) => {
+          script.onload = resolve;
+          script.onerror = reject;
         });
       }
-    });
+
+      const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      faceModelsLoaded = true;
+    }
+
+    async function startFaceCamera() {
+      const video = document.getElementById('face-video');
+      if (!video) return null;
+
+      if (faceStream) return video;
+
+      faceStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: 640, height: 480 },
+        audio: false
+      });
+
+      video.srcObject = faceStream;
+      await new Promise(resolve => {
+        video.onloadedmetadata = () => resolve();
+      });
+
+      return video;
+    }
+
+        async function atualizarStatusFace() {
+      const status = document.getElementById('face-status');
+      if (!status) return;
+
+      try {
+        const res = await fetch('/face/status');
+        const data = await res.json();
+
+        if (data.hasFace) {
+          status.textContent = 'Biometria cadastrada';
+          status.style.background = 'rgba(37,193,140,.18)';
+          status.style.color = '#defff2';
+        } else {
+          status.textContent = 'Biometria não cadastrada';
+          status.style.background = 'rgba(255,193,7,.16)';
+          status.style.color = '#ffe9a6';
+        }
+      } catch (err) {
+        status.textContent = 'Falha ao verificar';
+        status.style.background = 'rgba(255,107,132,.16)';
+        status.style.color = '#ffd8dd';
+      }
+    }
+
+            async function cadastrarFace() {
+      try {
+        showFaceMessage('Preparando câmera...', false);
+        await loadFaceModels();
+        const video = await startFaceCamera();
+
+        const detection = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceLandmarks(true)
+          .withFaceDescriptor();
+
+        if (!detection) {
+          throw new Error('Nenhum rosto detectado. Centralize o rosto e tente novamente.');
+        }
+
+        const descriptor = Array.from(detection.descriptor);
+
+        const res = await fetch('/face/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ descriptor })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+          throw new Error(data.message || 'Falha ao cadastrar biometria.');
+        }
+
+        showFaceMessage(data.message || 'Biometria facial cadastrada com sucesso.', false);
+        atualizarStatusFace();
+      } catch (err) {
+        showFaceMessage(err.message || 'Erro ao cadastrar biometria.', true);
+      }
+    }
+        async function removerFace() {
+      try {
+        const ok = confirm('Deseja realmente remover sua biometria facial?');
+        if (!ok) return;
+
+        const res = await fetch('/face/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+          throw new Error(data.message || 'Falha ao remover biometria.');
+        }
+
+        showFaceMessage(data.message || 'Biometria facial removida com sucesso.', false);
+        atualizarStatusFace();
+      } catch (err) {
+        showFaceMessage(err.message || 'Erro ao remover biometria.', true);
+      }
+    }
+        function showFaceMessage(message, isError) {
+      const msg = document.getElementById('face-msg');
+      if (!msg) return;
+
+      msg.style.display = 'block';
+      msg.textContent = message;
+
+      if (isError) {
+        msg.style.background = 'rgba(255,138,151,.15)';
+        msg.style.color = '#ffd8dd';
+        msg.style.border = '1px solid rgba(255,138,151,.18)';
+      } else {
+        msg.style.background = 'rgba(37,193,140,.15)';
+        msg.style.color = '#defff2';
+        msg.style.border = '1px solid rgba(37,193,140,.18)';
+      }
+    }
   </script>
 </body>
 </html>
@@ -1163,7 +1497,30 @@ async function initDB() {
       role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
     )
   `);
-
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'face_descriptor'
+      ) THEN
+        ALTER TABLE users ADD COLUMN face_descriptor TEXT;
+      END IF;
+    END
+    $$;
+  `);
+    await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'is_active'
+      ) THEN
+        ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+      END IF;
+    END
+    $$;
+  `);
   await pool.query(`
     DO $$
     BEGIN
@@ -1254,8 +1611,10 @@ async function initDB() {
 
   await pool.query(
     `
-    INSERT INTO users (name, username, password_hash, role)
-    VALUES ('Administrador', 'admin', $1, 'admin')
+    await pool.query(
+    `
+    INSERT INTO users (name, username, password_hash, role, is_active)
+    VALUES ('Administrador', 'admin', $1, 'admin', TRUE)
     ON CONFLICT (username) DO NOTHING
     `,
     [adminPasswordHash]
@@ -1263,8 +1622,10 @@ async function initDB() {
 
   await pool.query(
     `
-    INSERT INTO users (name, username, password_hash, role)
-    VALUES ('Financeiro', 'financeiro', $1, 'finance')
+    await pool.query(
+    `
+    INSERT INTO users (name, username, password_hash, role, is_active)
+    VALUES ('Financeiro', 'financeiro', $1, 'finance', TRUE)
     ON CONFLICT (username) DO NOTHING
     `,
     [financePasswordHash]
@@ -1273,7 +1634,7 @@ async function initDB() {
   await pool.query(
     `
     UPDATE users
-    SET password_hash = $1, role = 'admin', name = 'Administrador'
+    SET password_hash = $1, role = 'admin', name = 'Administrador', is_active = TRUE
     WHERE username = 'admin'
     `,
     [adminPasswordHash]
@@ -1281,8 +1642,10 @@ async function initDB() {
 
   await pool.query(
     `
+    await pool.query(
+    `
     UPDATE users
-    SET password_hash = $1, role = 'finance', name = 'Financeiro'
+    SET password_hash = $1, role = 'finance', name = 'Financeiro', is_active = TRUE
     WHERE username = 'financeiro'
     `,
     [financePasswordHash]
@@ -1312,6 +1675,142 @@ app.get('/', (req, res) => {
   res.render('login', { error: null });
 });
 
+function parseFaceDescriptor(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed) || parsed.length !== 128) return null;
+    return parsed.map(Number);
+  } catch {
+    return null;
+  }
+}
+
+function euclideanDistance(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return Infinity;
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const diff = Number(a[i]) - Number(b[i]);
+    sum += diff * diff;
+  }
+  return Math.sqrt(sum);
+}
+
+app.post('/face/register', requireAuth, async (req, res) => {
+  const { descriptor } = req.body;
+
+  if (!Array.isArray(descriptor) || descriptor.length !== 128) {
+    return res.status(400).json({
+      success: false,
+      message: 'Descriptor facial inválido.'
+    });
+  }
+
+  try {
+    await pool.query(
+      'UPDATE users SET face_descriptor = $1 WHERE id = $2',
+      [JSON.stringify(descriptor.map(Number)), req.session.user.id]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Biometria facial cadastrada com sucesso.'
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao salvar biometria facial.'
+    });
+  }
+});
+
+app.get('/face/status', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT face_descriptor FROM users WHERE id = $1',
+      [req.session.user.id]
+    );
+
+    const user = result.rows[0];
+    return res.json({
+      success: true,
+      hasFace: !!(user && user.face_descriptor)
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      hasFace: false
+    });
+  }
+});
+
+app.post('/login-face', async (req, res) => {
+  const { descriptor } = req.body;
+
+  if (!Array.isArray(descriptor) || descriptor.length !== 128) {
+          return res.status(401).json({
+        success: false,
+        message: 'Rosto não reconhecido ou biometria não cadastrada para um usuário ativo.'
+      });
+  }
+
+  try {
+        const result = await pool.query(`
+      SELECT id, name, username, role, face_descriptor, is_active
+      FROM users
+      WHERE face_descriptor IS NOT NULL
+        AND is_active = TRUE
+    `);
+
+    const probe = descriptor.map(Number);
+    let bestUser = null;
+    let bestDistance = Infinity;
+
+    for (const user of result.rows) {
+      const savedDescriptor = parseFaceDescriptor(user.face_descriptor);
+      if (!savedDescriptor) continue;
+
+      const distance = euclideanDistance(probe, savedDescriptor);
+
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestUser = user;
+      }
+    }
+
+    const THRESHOLD = 0.50;
+
+    if (!bestUser || bestDistance > THRESHOLD) {
+      return res.status(401).json({
+        success: false,
+        message: 'Rosto não reconhecido.'
+      });
+    }
+
+    req.session.user = {
+      id: bestUser.id,
+      name: bestUser.name,
+      username: bestUser.username,
+      role: bestUser.role,
+    };
+
+    return res.json({
+      success: true,
+      message: 'Login facial realizado com sucesso.',
+      redirect: '/dashboard',
+      distance: Number(bestDistance.toFixed(4))
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao processar login facial.'
+    });
+  }
+});
+
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -1320,6 +1819,9 @@ app.post('/login', async (req, res) => {
       `SELECT * FROM users WHERE username = $1`,
       [username]
     );
+        if (!user.is_active) {
+      return res.render('login', { error: 'Seu usuário está inativo. Procure o administrador.' });
+    }
 
     const user = result.rows[0];
 
@@ -1399,8 +1901,8 @@ app.post('/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      `INSERT INTO users (name, cpf, username, password_hash, role)
-       VALUES ($1, $2, $3, $4, 'employee')`,
+       `INSERT INTO users (name, cpf, username, password_hash, role, is_active)
+       VALUES ($1, $2, $3, $4, 'employee', TRUE)`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash]
     );
 
@@ -1495,7 +1997,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     let users = [];
     if (user.role === 'admin') {
       const usersResult = await pool.query(`
-        SELECT id, name, username, cpf, role
+        SELECT id, name, username, cpf, role, is_active
         FROM users
         ORDER BY role ASC, name ASC
       `);
@@ -1517,6 +2019,43 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).send('Erro ao carregar dashboard.');
+  }
+});
+
+app.post('/admin/users/:id/toggle-active', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const userResult = await pool.query(
+      'SELECT id, username, name, is_active FROM users WHERE id = $1',
+      [id]
+    );
+
+    const targetUser = userResult.rows[0];
+
+    if (!targetUser) {
+      req.session.message = 'Usuário não encontrado.';
+      return res.redirect('/dashboard');
+    }
+
+    if (targetUser.username === 'admin' || targetUser.username === 'financeiro') {
+      req.session.message = 'Não é possível inativar usuários fixos do sistema.';
+      return res.redirect('/dashboard');
+    }
+
+    const newStatus = !targetUser.is_active;
+
+    await pool.query(
+      'UPDATE users SET is_active = $1 WHERE id = $2',
+      [newStatus, id]
+    );
+
+    req.session.message = `Usuário "${targetUser.name}" ${newStatus ? 'ativado' : 'inativado'} com sucesso.`;
+    return res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao alterar status do usuário.';
+    return res.redirect('/dashboard');
   }
 });
 
@@ -1679,7 +2218,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-      `INSERT INTO users (name, cpf, username, password_hash, role) VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO users (name, cpf, username, password_hash, role, is_active) VALUES ($1, $2, $3, $4, $5, TRUE)`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash, role]
     );
 
@@ -2340,6 +2879,26 @@ app.post('/invoices/:id/delete', requireFinanceOrAdmin, async (req, res) => {
     console.error(err);
     req.session.message = 'Erro ao excluir nota fiscal.';
     res.redirect('/dashboard');
+  }
+});
+
+app.post('/face/remove', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE users SET face_descriptor = NULL WHERE id = $1',
+      [req.session.user.id]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Biometria facial removida com sucesso.'
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao remover biometria facial.'
+    });
   }
 });
 
