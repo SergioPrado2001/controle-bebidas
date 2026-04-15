@@ -120,9 +120,6 @@ const templates = {
       background:linear-gradient(135deg, var(--accent), var(--accent2));
       color:#fff; border:none; cursor:pointer; font-weight:700;
     }
-    .btn-face {
-      background:linear-gradient(135deg, #0d9b73, #21c58b);
-    }
     .msg {
       background:rgba(255,138,151,.15);
       color:#ffd8dd;
@@ -155,12 +152,23 @@ const templates = {
       margin-top:14px;
       background:#000;
       border:1px solid rgba(255,255,255,.12);
+      min-height:260px;
+      object-fit:cover;
     }
     .small {
       font-size:13px;
       color:var(--muted);
       margin-top:10px;
       line-height:1.5;
+    }
+    .status-pill {
+      display:inline-block;
+      margin-top:12px;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(255,255,255,.08);
+      color:#dce8ff;
+      font-size:12px;
     }
   </style>
 </head>
@@ -180,6 +188,7 @@ const templates = {
 
     <div id="msg-face" class="msg" style="display:none;"></div>
     <div id="msg-face-ok" class="msg-ok"></div>
+    <div id="face-status" class="status-pill">Iniciando câmera facial...</div>
 
     <form method="POST" action="/login">
       <input type="text" name="username" placeholder="Usuário" required />
@@ -187,10 +196,8 @@ const templates = {
       <button type="submit">Entrar com senha</button>
     </form>
 
-    <button type="button" class="btn-face" onclick="loginComRosto()">Entrar com reconhecimento facial</button>
-
     <video id="video" autoplay muted playsinline></video>
-    <p class="small">Centralize o rosto, com boa iluminação, e aguarde a captura.</p>
+    <p class="small">A câmera fica ativa automaticamente. Basta olhar para a câmera para tentar entrar com reconhecimento facial.</p>
 
     <div class="link">
       <a href="/register">Criar meu usuário</a>
@@ -201,19 +208,28 @@ const templates = {
     const video = document.getElementById('video');
     const msgFace = document.getElementById('msg-face');
     const msgFaceOk = document.getElementById('msg-face-ok');
+    const faceStatus = document.getElementById('face-status');
     let modelsLoaded = false;
     let stream = null;
+    let isAutoLoggingIn = false;
+    let autoLoginTimer = null;
+
+    function setFaceStatus(message) {
+      if (faceStatus) faceStatus.textContent = message;
+    }
 
     function showError(message) {
       msgFace.style.display = 'block';
       msgFace.textContent = message;
       msgFaceOk.style.display = 'none';
+      setFaceStatus(message);
     }
 
     function showSuccess(message) {
       msgFaceOk.style.display = 'block';
       msgFaceOk.textContent = message;
       msgFace.style.display = 'none';
+      setFaceStatus(message);
     }
 
     async function ensureFaceApi() {
@@ -267,16 +283,19 @@ const templates = {
 
     async function loadModels() {
       if (modelsLoaded) return;
+      setFaceStatus('Carregando reconhecimento facial...');
       const faceapi = await ensureFaceApi();
       const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
       await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
       modelsLoaded = true;
+      setFaceStatus('Reconhecimento facial pronto.');
     }
 
     async function startCamera() {
       if (stream) return;
+      setFaceStatus('Solicitando acesso à câmera...');
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
         audio: false
@@ -285,12 +304,12 @@ const templates = {
       await new Promise(resolve => {
         video.onloadedmetadata = () => resolve();
       });
+      setFaceStatus('Câmera ativa. Olhe para a câmera.');
     }
 
     async function capturarDescriptor() {
       await loadModels();
       await startCamera();
-
       const faceapi = await ensureFaceApi();
 
       const detection = await faceapi
@@ -298,17 +317,25 @@ const templates = {
         .withFaceLandmarks(true)
         .withFaceDescriptor();
 
-      if (!detection) {
-        throw new Error('Nenhum rosto encontrado. Tente novamente com melhor iluminação.');
-      }
-
+      if (!detection) return null;
       return Array.from(detection.descriptor);
     }
 
     async function loginComRosto() {
+      if (isAutoLoggingIn) return;
+
       try {
-        showSuccess('Preparando câmera...');
+        isAutoLoggingIn = true;
+        setFaceStatus('Analisando rosto...');
         const descriptor = await capturarDescriptor();
+
+        if (!descriptor) {
+          setFaceStatus('Nenhum rosto detectado. Continue olhando para a câmera.');
+          isAutoLoggingIn = false;
+          return;
+        }
+
+        setFaceStatus('Validando biometria...');
 
         const response = await fetch('/login-face', {
           method: 'POST',
@@ -319,20 +346,43 @@ const templates = {
         const data = await response.json();
 
         if (!data.success) {
-          throw new Error(data.message || 'Falha no login facial.');
+          setFaceStatus('Rosto não reconhecido. Continue olhando para a câmera.');
+          isAutoLoggingIn = false;
+          return;
         }
 
         showSuccess('Login facial reconhecido com sucesso.');
         window.location.href = data.redirect || '/dashboard';
       } catch (err) {
         showError(err.message || 'Erro ao usar reconhecimento facial.');
+        isAutoLoggingIn = false;
       }
     }
+
+    function iniciarLoginFacialAutomatico() {
+      if (autoLoginTimer) clearInterval(autoLoginTimer);
+
+      autoLoginTimer = setInterval(function() {
+        if (!isAutoLoggingIn) {
+          loginComRosto();
+        }
+      }, 1800);
+    }
+
+    document.addEventListener('DOMContentLoaded', async function() {
+      try {
+        await ensureFaceApi();
+        await loadModels();
+        await startCamera();
+        iniciarLoginFacialAutomatico();
+      } catch (err) {
+        showError(err.message || 'Não foi possível iniciar a câmera facial.');
+      }
+    });
   </script>
 </body>
 </html>
 `,
-
   'register.ejs': `
 <!DOCTYPE html>
 <html lang="pt-BR">
