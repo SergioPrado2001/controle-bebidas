@@ -1817,6 +1817,37 @@ async function initDB() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() AT TIME ZONE 'America/Cuiaba')
+    )
+  `);
+
+  const stockResetKey = 'stock_reset_v1';
+  const stockResetResult = await pool.query(
+    'SELECT key FROM system_settings WHERE key = $1',
+    [stockResetKey]
+  );
+
+  if (stockResetResult.rows.length === 0) {
+    await pool.query('BEGIN');
+    try {
+      await pool.query('DELETE FROM stock_entries');
+      await pool.query('UPDATE products SET stock_quantity = 0');
+      await pool.query(
+        'INSERT INTO system_settings (key, value) VALUES ($1, $2)',
+        [stockResetKey, 'done']
+      );
+      await pool.query('COMMIT');
+      console.log('Histórico de estoque limpo e estoque zerado com sucesso.');
+    } catch (resetErr) {
+      await pool.query('ROLLBACK').catch(() => {});
+      throw resetErr;
+    }
+  }
+
   const adminPasswordHash = bcrypt.hashSync('GPMadmin26', 10);
   const financePasswordHash = bcrypt.hashSync('GPMfin26', 10);
 
