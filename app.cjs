@@ -1,3 +1,4 @@
+
 console.log('APP INICIANDO...');
 const express = require('express');
 const session = require('express-session');
@@ -5,12 +6,12 @@ const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
-const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
 const dayjs = require('dayjs');
 const utc = require('dayjs/plugin/utc');
 const timezone = require('dayjs/plugin/timezone');
+
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.tz.setDefault('America/Cuiaba');
@@ -123,8 +124,12 @@ const templates = {
       background:linear-gradient(135deg, #0d9b73, #21c58b);
     }
     .msg {
-      background:rgba(255,138,151,.15); color:#ffd8dd; padding:12px; border-radius:12px;
-      margin-top:12px; border:1px solid rgba(255,138,151,.18);
+      background:rgba(255,138,151,.15);
+      color:#ffd8dd;
+      padding:12px;
+      border-radius:12px;
+      margin-top:12px;
+      border:1px solid rgba(255,138,151,.18);
     }
     .msg-ok {
       background:rgba(37,193,140,.15);
@@ -734,6 +739,61 @@ const templates = {
       <div class="employee-layout">
         <div>
           <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+              <div>
+                <h2 style="margin-bottom:6px;">Biometria facial</h2>
+                <p class="muted" style="margin:0;">
+                  Cadastre seu rosto para entrar no sistema com mais praticidade.
+                </p>
+              </div>
+              <div id="face-status" class="pill">Verificando...</div>
+            </div>
+
+            <div id="face-msg" class="msg" style="display:none;margin-top:14px;"></div>
+
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:start;margin-top:18px;">
+              <div>
+                <div style="position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.02));padding:14px;">
+                  <video
+                    id="face-video"
+                    autoplay
+                    muted
+                    playsinline
+                    style="width:100%;display:block;border-radius:18px;background:#000;min-height:280px;object-fit:cover;">
+                  </video>
+
+                  <div style="position:absolute;inset:28px;border:2px dashed rgba(255,255,255,.35);border-radius:28px;pointer-events:none;"></div>
+                </div>
+
+                <p class="muted" style="margin:12px 0 0;line-height:1.5;">
+                  Posicione o rosto no centro, com boa iluminação e sem óculos escuros.
+                </p>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <button type="button" class="btn-pix" onclick="cadastrarFace()">
+                  Cadastrar biometria
+                </button>
+
+                <button type="button" class="btn-soft" onclick="atualizarStatusFace()">
+                  Atualizar status
+                </button>
+
+                <button type="button" class="btn-danger" onclick="removerFace()">
+                  Remover biometria
+                </button>
+
+                <div class="info" style="margin-top:6px;">
+                  <span class="pill">Dica</span>
+                  <p class="muted" style="margin:10px 0 0;line-height:1.5;">
+                    Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
             <h2>Produtos cadastrados</h2>
             <p class="muted" style="margin-top:0;">Clique nos produtos para adicionar ao carrinho.</p>
             <div class="grid">
@@ -802,60 +862,6 @@ const templates = {
         </div>
       </div>
     <% } else { %>
-    <div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <div>
-      <h2 style="margin-bottom:6px;">Biometria facial</h2>
-      <p class="muted" style="margin:0;">
-        Cadastre seu rosto para entrar no sistema com mais praticidade.
-      </p>
-    </div>
-    <div id="face-status" class="pill">Verificando...</div>
-  </div>
-
-  <div id="face-msg" class="msg" style="display:none;margin-top:14px;"></div>
-
-  <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:start;margin-top:18px;">
-    <div>
-      <div style="position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.02));padding:14px;">
-        <video
-          id="face-video"
-          autoplay
-          muted
-          playsinline
-          style="width:100%;display:block;border-radius:18px;background:#000;min-height:280px;object-fit:cover;">
-        </video>
-
-        <div style="position:absolute;inset:28px;border:2px dashed rgba(255,255,255,.35);border-radius:28px;pointer-events:none;"></div>
-      </div>
-
-      <p class="muted" style="margin:12px 0 0;line-height:1.5;">
-        Posicione o rosto no centro, com boa iluminação e sem óculos escuros.
-      </p>
-    </div>
-
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <button type="button" class="btn-pix" onclick="cadastrarFace()">
-        Cadastrar biometria
-      </button>
-
-      <button type="button" class="btn-soft" onclick="atualizarStatusFace()">
-        Atualizar status
-      </button>
-
-      <button type="button" class="btn-danger" onclick="removerFace()">
-        Remover biometria
-      </button>
-
-      <div class="info" style="margin-top:6px;">
-        <span class="pill">Dica</span>
-        <p class="muted" style="margin:10px 0 0;line-height:1.5;">
-          Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
-        </p>
-      </div>
-    </div>
-  </div>
-</div>
       <div class="card">
         <h2>Produtos cadastrados</h2>
         <div class="grid">
@@ -947,28 +953,6 @@ const templates = {
               <th>Ações</th>
             </tr>
           </thead>
-          <td>
-  <span class="pill" style="<%= item.is_active ? 'background:rgba(37,193,140,.18);color:#defff2;' : 'background:rgba(255,107,132,.16);color:#ffd8dd;' %>">
-    <%= item.is_active ? 'Ativo' : 'Inativo' %>
-  </span>
-</td>
-<td>
-  <div class="actions">
-    <% if (item.username !== 'admin' && item.username !== 'financeiro') { %>
-      <form method="POST" action="/admin/users/<%= item.id %>/toggle-active" style="margin:0;">
-        <button type="submit" class="<%= item.is_active ? 'btn-soft' : '' %>" style="padding:6px 12px; font-size:12px;">
-          <%= item.is_active ? 'Inativar' : 'Ativar' %>
-        </button>
-      </form>
-
-      <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usuário ' + '<%= item.name %>' + '? Todos os lançamentos dele serão removidos.')" style="margin:0;">
-        <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
-      </form>
-    <% } else { %>
-      -
-    <% } %>
-  </div>
-</td>
           <tbody>
             <% users.forEach(item => { %>
               <tr>
@@ -977,13 +961,26 @@ const templates = {
                 <td><%= item.username %></td>
                 <td><%= item.role %></td>
                 <td>
-                  <% if (item.username !== 'admin' && item.username !== 'financeiro') { %>
-                    <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usuário ' + '<%= item.name %>' + '? Todos os lançamentos dele serão removidos.')" style="margin:0;">
-                      <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
-                    </form>
-                  <% } else { %>
-                    -
-                  <% } %>
+                  <span class="pill" style="<%= item.is_active ? 'background:rgba(37,193,140,.18);color:#defff2;' : 'background:rgba(255,107,132,.16);color:#ffd8dd;' %>">
+                    <%= item.is_active ? 'Ativo' : 'Inativo' %>
+                  </span>
+                </td>
+                <td>
+                  <div class="actions">
+                    <% if (item.username !== 'admin' && item.username !== 'financeiro') { %>
+                      <form method="POST" action="/admin/users/<%= item.id %>/toggle-active" style="margin:0;">
+                        <button type="submit" class="<%= item.is_active ? 'btn-soft' : '' %>" style="padding:6px 12px; font-size:12px;">
+                          <%= item.is_active ? 'Inativar' : 'Ativar' %>
+                        </button>
+                      </form>
+
+                      <form method="POST" action="/admin/users/<%= item.id %>/delete" onsubmit="return confirm('Deseja realmente excluir o usuário ' + '<%= item.name %>' + '? Todos os lançamentos dele serão removidos.')" style="margin:0;">
+                        <button type="submit" class="btn-danger" style="padding:6px 12px; font-size:12px;">Excluir</button>
+                      </form>
+                    <% } else { %>
+                      -
+                    <% } %>
+                  </div>
                 </td>
               </tr>
             <% }) %>
@@ -1161,6 +1158,8 @@ const templates = {
 
   <script>
     var cart = {};
+    let faceModelsLoaded = false;
+    let faceStream = null;
 
     function addToCart(el) {
       if (!el || el.classList.contains('unavailable')) return;
@@ -1316,28 +1315,23 @@ const templates = {
       });
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
-    card.addEventListener('click', function() {
-      addToCart(card);
-    });
-  });
+    function showFaceMessage(message, isError) {
+      const msg = document.getElementById('face-msg');
+      if (!msg) return;
 
-  var cpfAdmin = document.getElementById('cpf-admin');
-  if (cpfAdmin) {
-    cpfAdmin.addEventListener('input', function(e) {
-      let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-      if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
-      else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
-      else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
-      e.target.value = v;
-    });
-  }
+      msg.style.display = 'block';
+      msg.textContent = message;
 
-  atualizarStatusFace();
-});
-        let faceModelsLoaded = false;
-    let faceStream = null;
+      if (isError) {
+        msg.style.background = 'rgba(255,138,151,.15)';
+        msg.style.color = '#ffd8dd';
+        msg.style.border = '1px solid rgba(255,138,151,.18)';
+      } else {
+        msg.style.background = 'rgba(37,193,140,.15)';
+        msg.style.color = '#defff2';
+        msg.style.border = '1px solid rgba(37,193,140,.18)';
+      }
+    }
 
     async function loadFaceModels() {
       if (faceModelsLoaded) return;
@@ -1378,7 +1372,7 @@ const templates = {
       return video;
     }
 
-        async function atualizarStatusFace() {
+    async function atualizarStatusFace() {
       const status = document.getElementById('face-status');
       if (!status) return;
 
@@ -1402,7 +1396,7 @@ const templates = {
       }
     }
 
-            async function cadastrarFace() {
+    async function cadastrarFace() {
       try {
         showFaceMessage('Preparando câmera...', false);
         await loadFaceModels();
@@ -1437,7 +1431,8 @@ const templates = {
         showFaceMessage(err.message || 'Erro ao cadastrar biometria.', true);
       }
     }
-        async function removerFace() {
+
+    async function removerFace() {
       try {
         const ok = confirm('Deseja realmente remover sua biometria facial?');
         if (!ok) return;
@@ -1459,23 +1454,27 @@ const templates = {
         showFaceMessage(err.message || 'Erro ao remover biometria.', true);
       }
     }
-        function showFaceMessage(message, isError) {
-      const msg = document.getElementById('face-msg');
-      if (!msg) return;
 
-      msg.style.display = 'block';
-      msg.textContent = message;
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-clickable="true"]').forEach(function(card) {
+        card.addEventListener('click', function() {
+          addToCart(card);
+        });
+      });
 
-      if (isError) {
-        msg.style.background = 'rgba(255,138,151,.15)';
-        msg.style.color = '#ffd8dd';
-        msg.style.border = '1px solid rgba(255,138,151,.18)';
-      } else {
-        msg.style.background = 'rgba(37,193,140,.15)';
-        msg.style.color = '#defff2';
-        msg.style.border = '1px solid rgba(37,193,140,.18)';
+      var cpfAdmin = document.getElementById('cpf-admin');
+      if (cpfAdmin) {
+        cpfAdmin.addEventListener('input', function(e) {
+          let v = e.target.value.replace(/\\D/g, '').slice(0, 11);
+          if (v.length > 9) v = v.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{1,2})/, '$1.$2.$3-$4');
+          else if (v.length > 6) v = v.replace(/(\\d{3})(\\d{3})(\\d{1,3})/, '$1.$2.$3');
+          else if (v.length > 3) v = v.replace(/(\\d{3})(\\d{1,3})/, '$1.$2');
+          e.target.value = v;
+        });
       }
-    }
+
+      atualizarStatusFace();
+    });
   </script>
 </body>
 </html>
@@ -1497,6 +1496,20 @@ async function initDB() {
       role TEXT NOT NULL CHECK (role IN ('employee', 'finance', 'admin'))
     )
   `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'cpf'
+      ) THEN
+        ALTER TABLE users ADD COLUMN cpf TEXT UNIQUE;
+      END IF;
+    END
+    $$;
+  `);
+
   await pool.query(`
     DO $$
     BEGIN
@@ -1509,7 +1522,8 @@ async function initDB() {
     END
     $$;
   `);
-    await pool.query(`
+
+  await pool.query(`
     DO $$
     BEGIN
       IF NOT EXISTS (
@@ -1517,18 +1531,6 @@ async function initDB() {
         WHERE table_name = 'users' AND column_name = 'is_active'
       ) THEN
         ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
-      END IF;
-    END
-    $$;
-  `);
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'cpf'
-      ) THEN
-        ALTER TABLE users ADD COLUMN cpf TEXT UNIQUE;
       END IF;
     END
     $$;
@@ -1611,8 +1613,6 @@ async function initDB() {
 
   await pool.query(
     `
-    await pool.query(
-    `
     INSERT INTO users (name, username, password_hash, role, is_active)
     VALUES ('Administrador', 'admin', $1, 'admin', TRUE)
     ON CONFLICT (username) DO NOTHING
@@ -1621,8 +1621,6 @@ async function initDB() {
   );
 
   await pool.query(
-    `
-    await pool.query(
     `
     INSERT INTO users (name, username, password_hash, role, is_active)
     VALUES ('Financeiro', 'financeiro', $1, 'finance', TRUE)
@@ -1641,8 +1639,6 @@ async function initDB() {
   );
 
   await pool.query(
-    `
-    await pool.query(
     `
     UPDATE users
     SET password_hash = $1, role = 'finance', name = 'Financeiro', is_active = TRUE
@@ -1671,10 +1667,6 @@ function requireFinanceOrAdmin(req, res, next) {
   next();
 }
 
-app.get('/', (req, res) => {
-  res.render('login', { error: null });
-});
-
 function parseFaceDescriptor(value) {
   if (!value) return null;
   try {
@@ -1696,7 +1688,44 @@ function euclideanDistance(a, b) {
   return Math.sqrt(sum);
 }
 
-app.post('/face/register', requireAuth, async (req, res) => {
+app.get('/', (req, res) => {
+  res.render('login', { error: null });
+});
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM users WHERE username = $1`,
+      [username]
+    );
+
+    const user = result.rows[0];
+
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.render('login', { error: 'Usuário ou senha inválidos.' });
+    }
+
+    if (!user.is_active) {
+      return res.render('login', { error: 'Seu usuário está inativo. Procure o administrador.' });
+    }
+
+    req.session.user = {
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+    };
+
+    res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    res.render('login', { error: 'Erro interno ao tentar entrar.' });
+  }
+});
+
+app.post('/login-face', async (req, res) => {
   const { descriptor } = req.body;
 
   if (!Array.isArray(descriptor) || descriptor.length !== 128) {
@@ -1707,58 +1736,8 @@ app.post('/face/register', requireAuth, async (req, res) => {
   }
 
   try {
-    await pool.query(
-      'UPDATE users SET face_descriptor = $1 WHERE id = $2',
-      [JSON.stringify(descriptor.map(Number)), req.session.user.id]
-    );
-
-    return res.json({
-      success: true,
-      message: 'Biometria facial cadastrada com sucesso.'
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      message: 'Erro ao salvar biometria facial.'
-    });
-  }
-});
-
-app.get('/face/status', requireAuth, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT face_descriptor FROM users WHERE id = $1',
-      [req.session.user.id]
-    );
-
-    const user = result.rows[0];
-    return res.json({
-      success: true,
-      hasFace: !!(user && user.face_descriptor)
-    });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      success: false,
-      hasFace: false
-    });
-  }
-});
-
-app.post('/login-face', async (req, res) => {
-  const { descriptor } = req.body;
-
-  if (!Array.isArray(descriptor) || descriptor.length !== 128) {
-          return res.status(401).json({
-        success: false,
-        message: 'Rosto não reconhecido ou biometria não cadastrada para um usuário ativo.'
-      });
-  }
-
-  try {
-        const result = await pool.query(`
-      SELECT id, name, username, role, face_descriptor, is_active
+    const result = await pool.query(`
+      SELECT id, name, username, role, face_descriptor
       FROM users
       WHERE face_descriptor IS NOT NULL
         AND is_active = TRUE
@@ -1785,7 +1764,7 @@ app.post('/login-face', async (req, res) => {
     if (!bestUser || bestDistance > THRESHOLD) {
       return res.status(401).json({
         success: false,
-        message: 'Rosto não reconhecido.'
+        message: 'Rosto não reconhecido ou biometria não cadastrada para um usuário ativo.'
       });
     }
 
@@ -1811,38 +1790,6 @@ app.post('/login-face', async (req, res) => {
   }
 });
 
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-
-  try {
-    const result = await pool.query(
-      `SELECT * FROM users WHERE username = $1`,
-      [username]
-    );
-        if (!user.is_active) {
-      return res.render('login', { error: 'Seu usuário está inativo. Procure o administrador.' });
-    }
-
-    const user = result.rows[0];
-
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-      return res.render('login', { error: 'Usuário ou senha inválidos.' });
-    }
-
-    req.session.user = {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      role: user.role,
-    };
-
-    res.redirect('/dashboard');
-  } catch (err) {
-    console.error(err);
-    res.render('login', { error: 'Erro interno ao tentar entrar.' });
-  }
-});
-
 app.get('/register', (req, res) => {
   res.render('register', { success: null, error: null });
 });
@@ -1857,7 +1804,7 @@ app.post('/register', async (req, res) => {
     });
   }
 
-  const cpfLimpo = cpf.replace(/\\D/g, '');
+  const cpfLimpo = cpf.replace(/\D/g, '');
 
   if (cpfLimpo.length !== 11) {
     return res.render('register', {
@@ -1867,7 +1814,7 @@ app.post('/register', async (req, res) => {
   }
 
   function validarCPF(c) {
-    if (/^(\\d)\\1{10}$/.test(c)) return false;
+    if (/^(\d)\1{10}$/.test(c)) return false;
     let soma = 0;
     for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i);
     let resto = (soma * 10) % 11;
@@ -1887,7 +1834,7 @@ app.post('/register', async (req, res) => {
     });
   }
 
-  const cpfFormatado = cpfLimpo.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');
+  const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
   try {
     const cpfExiste = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpfFormatado]);
@@ -1901,7 +1848,7 @@ app.post('/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
 
     await pool.query(
-       `INSERT INTO users (name, cpf, username, password_hash, role, is_active)
+      `INSERT INTO users (name, cpf, username, password_hash, role, is_active)
        VALUES ($1, $2, $3, $4, 'employee', TRUE)`,
       [name.trim(), cpfFormatado, username.trim(), passwordHash]
     );
@@ -1956,6 +1903,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         withdrawalsAll: [],
         summaryByUser: [],
         users: [],
+        invoices: [],
+        invoiceMonth: '',
         message,
         dayjs
       });
@@ -2022,43 +1971,6 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/admin/users/:id/toggle-active', requireAdmin, async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const userResult = await pool.query(
-      'SELECT id, username, name, is_active FROM users WHERE id = $1',
-      [id]
-    );
-
-    const targetUser = userResult.rows[0];
-
-    if (!targetUser) {
-      req.session.message = 'Usuário não encontrado.';
-      return res.redirect('/dashboard');
-    }
-
-    if (targetUser.username === 'admin' || targetUser.username === 'financeiro') {
-      req.session.message = 'Não é possível inativar usuários fixos do sistema.';
-      return res.redirect('/dashboard');
-    }
-
-    const newStatus = !targetUser.is_active;
-
-    await pool.query(
-      'UPDATE users SET is_active = $1 WHERE id = $2',
-      [newStatus, id]
-    );
-
-    req.session.message = `Usuário "${targetUser.name}" ${newStatus ? 'ativado' : 'inativado'} com sucesso.`;
-    return res.redirect('/dashboard');
-  } catch (err) {
-    console.error(err);
-    req.session.message = 'Erro ao alterar status do usuário.';
-    return res.redirect('/dashboard');
-  }
-});
-
 app.post('/withdraw', requireAuth, async (req, res) => {
   const user = req.session.user;
 
@@ -2085,7 +1997,7 @@ app.post('/withdraw', requireAuth, async (req, res) => {
         }
 
         const estoqueAtual = Number(product.stock_quantity || 0);
-        const qtySolicitada = parseInt(cartItem.qty) || 1;
+        const qtySolicitada = parseInt(cartItem.qty, 10) || 1;
 
         if (estoqueAtual <= 0) {
           await pool.query('ROLLBACK');
@@ -2180,7 +2092,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  const cpfLimpo = cpf.replace(/\\D/g, '');
+  const cpfLimpo = cpf.replace(/\D/g, '');
 
   if (cpfLimpo.length !== 11) {
     req.session.message = 'CPF inválido. Informe os 11 dígitos.';
@@ -2188,7 +2100,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
   }
 
   function validarCPF(c) {
-    if (/^(\\d)\\1{10}$/.test(c)) return false;
+    if (/^(\d)\1{10}$/.test(c)) return false;
     let soma = 0;
     for (let i = 0; i < 9; i++) soma += Number(c[i]) * (10 - i);
     let resto = (soma * 10) % 11;
@@ -2206,7 +2118,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  const cpfFormatado = cpfLimpo.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{2})/, '$1.$2.$3-$4');
+  const cpfFormatado = cpfLimpo.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
   try {
     const cpfExiste = await pool.query('SELECT id FROM users WHERE cpf = $1', [cpfFormatado]);
@@ -2232,6 +2144,43 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
     }
     req.session.message = 'Não foi possível cadastrar o usuário.';
     res.redirect('/dashboard');
+  }
+});
+
+app.post('/admin/users/:id/toggle-active', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const userResult = await pool.query(
+      'SELECT id, username, name, is_active FROM users WHERE id = $1',
+      [id]
+    );
+
+    const targetUser = userResult.rows[0];
+
+    if (!targetUser) {
+      req.session.message = 'Usuário não encontrado.';
+      return res.redirect('/dashboard');
+    }
+
+    if (targetUser.username === 'admin' || targetUser.username === 'financeiro') {
+      req.session.message = 'Não é possível inativar usuários fixos do sistema.';
+      return res.redirect('/dashboard');
+    }
+
+    const newStatus = !targetUser.is_active;
+
+    await pool.query(
+      'UPDATE users SET is_active = $1 WHERE id = $2',
+      [newStatus, id]
+    );
+
+    req.session.message = `Usuário "${targetUser.name}" ${newStatus ? 'ativado' : 'inativado'} com sucesso.`;
+    return res.redirect('/dashboard');
+  } catch (err) {
+    console.error(err);
+    req.session.message = 'Erro ao alterar status do usuário.';
+    return res.redirect('/dashboard');
   }
 });
 
@@ -2486,16 +2435,14 @@ app.post('/admin/withdrawals/:id/delete', requireFinanceOrAdmin, async (req, res
 app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
   let { start, end } = req.query;
 
-// Se não vier data, define padrão automático
-if (!start || !end) {
-  start = dayjs().startOf('month').format('YYYY-MM-DD');
-  end = dayjs().format('YYYY-MM-DD');
-}
+  if (!start || !end) {
+    start = dayjs().startOf('month').format('YYYY-MM-DD');
+    end = dayjs().format('YYYY-MM-DD');
+  }
 
-// Validação
-if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-  return res.status(400).send('Formato de data inválido.');
-}
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end)) {
+    return res.status(400).send('Formato de data inválido.');
+  }
 
   if (dayjs(end).isBefore(dayjs(start))) {
     return res.status(400).send('A data fim não pode ser anterior à data de início.');
@@ -2524,14 +2471,14 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
     );
     const stockRows = stockResult.rows;
 
-        const allProducts = await pool.query(`
+    const allProducts = await pool.query(`
       SELECT name, price
       FROM products
       ORDER BY sort_order ASC, name ASC
     `);
 
-    const produtos = allProducts.rows.map(p => p.name);
-    const precos = allProducts.rows.map(p => Number(p.price));
+    const produtos = allProducts.rows.map((p) => p.name);
+    const precos = allProducts.rows.map((p) => Number(p.price));
     const numProdutos = produtos.length;
 
     const precosVenda = {};
@@ -2594,7 +2541,11 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
 
     const setCellStyle = (r, c, val, font, align, fill) => {
       const cell = ws.getCell(r, c);
-      cell.value = val; cell.font = font; cell.alignment = align; cell.fill = fill; cell.border = bordaFina;
+      cell.value = val;
+      cell.font = font;
+      cell.alignment = align;
+      cell.fill = fill;
+      cell.border = bordaFina;
       return cell;
     };
 
@@ -2709,13 +2660,17 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
     const produtosEstoqueOrdenados = [...todosProdutosEstoque].sort();
 
     let linhaE = 3;
-    let totalEntradaGeral = 0, totalVendidaGeral = 0, totalCustoGeral = 0, totalReceitaGeral = 0, totalLucroGeral = 0;
+    let totalEntradaGeral = 0;
+    let totalVendidaGeral = 0;
+    let totalCustoGeral = 0;
+    let totalReceitaGeral = 0;
+    let totalLucroGeral = 0;
 
     for (let p = 0; p < produtosEstoqueOrdenados.length; p++) {
       const nome = produtosEstoqueOrdenados[p];
       const fillLinha = p % 2 === 0 ? azulClaro : branco;
 
-      const stockInfo = stockRows.find(s => s.product_name === nome);
+      const stockInfo = stockRows.find((s) => s.product_name === nome);
       const vendaInfo = vendasPorProduto[nome];
       const precoVenda = precosVenda[nome] || 0;
 
@@ -2733,7 +2688,11 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
 
       const setE = (c, val, fmt) => {
         const cell = wsE.getCell(linhaE, c);
-        cell.value = val; cell.font = fonteNormal; cell.alignment = alinhaCentro; cell.fill = fillLinha; cell.border = bordaFina;
+        cell.value = val;
+        cell.font = fonteNormal;
+        cell.alignment = alinhaCentro;
+        cell.fill = fillLinha;
+        cell.border = bordaFina;
         if (fmt) cell.numFmt = fmt;
         return cell;
       };
@@ -2759,7 +2718,11 @@ if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
     const fillTotal = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF9CC0DE' } };
     const setTot = (c, val, fmt) => {
       const cell = wsE.getCell(linhaE, c);
-      cell.value = val; cell.font = fonteTotalVerm; cell.alignment = alinhaCentro; cell.fill = fillTotal; cell.border = bordaFina;
+      cell.value = val;
+      cell.font = fonteTotalVerm;
+      cell.alignment = alinhaCentro;
+      cell.fill = fillTotal;
+      cell.border = bordaFina;
       if (fmt) cell.numFmt = fmt;
       return cell;
     };
@@ -2879,6 +2842,56 @@ app.post('/invoices/:id/delete', requireFinanceOrAdmin, async (req, res) => {
     console.error(err);
     req.session.message = 'Erro ao excluir nota fiscal.';
     res.redirect('/dashboard');
+  }
+});
+
+app.post('/face/register', requireAuth, async (req, res) => {
+  const { descriptor } = req.body;
+
+  if (!Array.isArray(descriptor) || descriptor.length !== 128) {
+    return res.status(400).json({
+      success: false,
+      message: 'Descriptor facial inválido.'
+    });
+  }
+
+  try {
+    await pool.query(
+      'UPDATE users SET face_descriptor = $1 WHERE id = $2',
+      [JSON.stringify(descriptor.map(Number)), req.session.user.id]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Biometria facial cadastrada com sucesso.'
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao salvar biometria facial.'
+    });
+  }
+});
+
+app.get('/face/status', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT face_descriptor FROM users WHERE id = $1',
+      [req.session.user.id]
+    );
+
+    const user = result.rows[0];
+    return res.json({
+      success: true,
+      hasFace: !!(user && user.face_descriptor)
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      hasFace: false
+    });
   }
 });
 
