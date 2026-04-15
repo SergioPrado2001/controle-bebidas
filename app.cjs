@@ -79,6 +79,7 @@ const templates = {
       --accent:#2563eb;
       --accent2:#5a8dff;
       --danger:#ff8a97;
+      --success:#25c18c;
     }
     * { box-sizing:border-box; }
     body {
@@ -94,14 +95,17 @@ const templates = {
     }
     .box {
       width:100%;
-      max-width:520px;
+      max-width:1100px;
       background:rgba(13,43,79,.95);
       padding:32px;
       border-radius:24px;
       box-shadow:0 18px 45px rgba(0,0,0,.35);
       border:1px solid var(--border);
     }
-    .brand { text-align:center; margin-bottom:22px; }
+    .brand {
+      text-align:center;
+      margin-bottom:24px;
+    }
     .logo-wrap {
       width:92px; height:92px; margin:0 auto 16px; background:#fff; border-radius:22px;
       display:flex; align-items:center; justify-content:center; box-shadow:0 10px 25px rgba(0,0,0,.25);
@@ -109,16 +113,45 @@ const templates = {
     }
     .logo-wrap img { width:72px; height:72px; object-fit:contain; }
     h1 { margin:0 0 8px; font-size:30px; }
-    .subtitle { color:var(--muted); line-height:1.5; }
+    .subtitle { color:var(--muted); line-height:1.5; margin:0; }
+    .login-layout {
+      display:grid;
+      grid-template-columns: minmax(320px, 440px) minmax(320px, 1fr);
+      gap:24px;
+      align-items:stretch;
+    }
+    .login-panel, .camera-panel {
+      background:linear-gradient(135deg, rgba(255,255,255,.05), rgba(255,255,255,.03));
+      border:1px solid var(--border);
+      border-radius:22px;
+      padding:24px;
+    }
+    .panel-title {
+      margin:0 0 8px;
+      font-size:22px;
+    }
+    .panel-subtitle {
+      color:var(--muted);
+      line-height:1.5;
+      margin:0 0 18px;
+    }
     input, button {
-      width:100%; padding:14px; margin-top:12px; border-radius:14px;
-      border:1px solid var(--border); box-sizing:border-box;
-      background:rgba(255,255,255,.05); color:var(--text);
+      width:100%;
+      padding:14px;
+      margin-top:12px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      box-sizing:border-box;
+      background:rgba(255,255,255,.05);
+      color:var(--text);
     }
     input::placeholder { color:#97afd6; }
     button {
       background:linear-gradient(135deg, var(--accent), var(--accent2));
-      color:#fff; border:none; cursor:pointer; font-weight:700;
+      color:#fff;
+      border:none;
+      cursor:pointer;
+      font-weight:700;
     }
     .msg {
       background:rgba(255,138,151,.15);
@@ -146,29 +179,60 @@ const templates = {
       text-decoration:none;
       font-weight:700;
     }
+    .camera-frame {
+      position:relative;
+      border-radius:20px;
+      overflow:hidden;
+      border:1px solid rgba(255,255,255,.12);
+      background:#000;
+      min-height:360px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .camera-guide {
+      position:absolute;
+      inset:22px;
+      border:2px dashed rgba(255,255,255,.35);
+      border-radius:26px;
+      pointer-events:none;
+    }
     video {
       width:100%;
-      border-radius:16px;
-      margin-top:14px;
-      background:#000;
-      border:1px solid rgba(255,255,255,.12);
-      min-height:260px;
+      height:100%;
+      min-height:360px;
       object-fit:cover;
+      display:block;
+      background:#000;
+    }
+    .face-status {
+      margin-top:14px;
+      padding:12px;
+      border-radius:12px;
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.08);
+      color:#dce8ff;
+      min-height:48px;
+      display:flex;
+      align-items:center;
     }
     .small {
       font-size:13px;
       color:var(--muted);
-      margin-top:10px;
+      margin-top:12px;
       line-height:1.5;
     }
-    .status-pill {
-      display:inline-block;
-      margin-top:12px;
-      padding:8px 12px;
-      border-radius:999px;
-      background:rgba(255,255,255,.08);
-      color:#dce8ff;
-      font-size:12px;
+    @media (max-width: 900px) {
+      .box { max-width:620px; }
+      .login-layout {
+        grid-template-columns: 1fr;
+      }
+      .camera-panel {
+        order:-1;
+      }
+      .camera-frame, video {
+        min-height:280px;
+      }
     }
   </style>
 </head>
@@ -179,7 +243,7 @@ const templates = {
         <img src="/logo-empresa.jpg" alt="Logo da empresa" />
       </div>
       <h1>Consumo de Bebidas</h1>
-      <p class="subtitle">Login do sistema interno.</p>
+      <p class="subtitle">Entre com usuário e senha ou apenas olhe para a câmera para login facial automático.</p>
     </div>
 
     <% if (error) { %>
@@ -188,19 +252,35 @@ const templates = {
 
     <div id="msg-face" class="msg" style="display:none;"></div>
     <div id="msg-face-ok" class="msg-ok"></div>
-    <div id="face-status" class="status-pill">Iniciando câmera facial...</div>
 
-    <form method="POST" action="/login">
-      <input type="text" name="username" placeholder="Usuário" required />
-      <input type="password" name="password" placeholder="Senha" required />
-      <button type="submit">Entrar com senha</button>
-    </form>
+    <div class="login-layout">
+      <div class="login-panel">
+        <h2 class="panel-title">Entrar com senha</h2>
+        <p class="panel-subtitle">Use seu acesso normal enquanto a câmera fica disponível ao lado.</p>
 
-    <video id="video" autoplay muted playsinline></video>
-    <p class="small">A câmera fica ativa automaticamente. Basta olhar para a câmera para tentar entrar com reconhecimento facial.</p>
+        <form method="POST" action="/login">
+          <input type="text" name="username" placeholder="Usuário" required />
+          <input type="password" name="password" placeholder="Senha" required />
+          <button type="submit">Entrar</button>
+        </form>
 
-    <div class="link">
-      <a href="/register">Criar meu usuário</a>
+        <div class="link">
+          <a href="/register">Criar meu usuário</a>
+        </div>
+      </div>
+
+      <div class="camera-panel">
+        <h2 class="panel-title">Login facial automático</h2>
+        <p class="panel-subtitle">Mantenha o rosto centralizado. Quando a biometria for reconhecida, o acesso acontece automaticamente.</p>
+
+        <div class="camera-frame">
+          <video id="video" autoplay muted playsinline></video>
+          <div class="camera-guide"></div>
+        </div>
+
+        <div id="face-status" class="face-status">Preparando câmera...</div>
+        <p class="small">Dica: use boa iluminação e mantenha o rosto visível, de frente para a câmera.</p>
+      </div>
     </div>
   </div>
 
@@ -211,8 +291,8 @@ const templates = {
     const faceStatus = document.getElementById('face-status');
     let modelsLoaded = false;
     let stream = null;
-    let isAutoLoggingIn = false;
     let autoLoginTimer = null;
+    let isAutoLoggingIn = false;
 
     function setFaceStatus(message) {
       if (faceStatus) faceStatus.textContent = message;
@@ -222,98 +302,92 @@ const templates = {
       msgFace.style.display = 'block';
       msgFace.textContent = message;
       msgFaceOk.style.display = 'none';
-      setFaceStatus(message);
     }
 
     function showSuccess(message) {
       msgFaceOk.style.display = 'block';
       msgFaceOk.textContent = message;
       msgFace.style.display = 'none';
-      setFaceStatus(message);
     }
 
-    async function ensureFaceApi() {
-      if (window.faceapi) return window.faceapi;
-
-      const sources = [
-        'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
-        'https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js',
-        'https://cdn.jsdelivr.net/npm/face-api.js'
-      ];
-
-      async function waitForFaceApi(timeoutMs) {
-        const started = Date.now();
-        while (Date.now() - started < timeoutMs) {
-          if (window.faceapi) return window.faceapi;
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        return null;
-      }
-
-      const existing = document.querySelector('script[data-faceapi="true"]');
-      if (existing) {
-        const ready = await waitForFaceApi(5000);
-        if (ready) return ready;
-      }
-
-      for (const src of sources) {
+    async function loadScriptWithFallback(urls) {
+      for (const url of urls) {
         try {
-          const old = document.querySelector('script[data-faceapi="true"]');
-          if (old) old.remove();
+          await new Promise((resolve, reject) => {
+            const existing = document.querySelector('script[data-faceapi-url="' + url + '"]');
+            if (existing) {
+              if (window.faceapi) return resolve();
+              existing.addEventListener('load', resolve, { once: true });
+              existing.addEventListener('error', reject, { once: true });
+              return;
+            }
 
-          await new Promise(function(resolve, reject) {
             const script = document.createElement('script');
-            script.src = src;
+            script.src = url;
             script.async = true;
-            script.dataset.faceapi = 'true';
-            script.onload = function() { resolve(); };
-            script.onerror = function() { reject(new Error('Falha ao carregar: ' + src)); };
+            script.dataset.faceapiUrl = url;
+            script.onload = resolve;
+            script.onerror = reject;
             document.head.appendChild(script);
           });
 
-          const ready = await waitForFaceApi(5000);
-          if (ready) return ready;
-        } catch (err) {
-          console.warn(err);
-        }
+          if (window.faceapi) return true;
+        } catch (err) {}
       }
+      return false;
+    }
 
-      throw new Error('Biblioteca facial não disponível no navegador. Verifique a conexão ou tente novamente.');
+    async function ensureFaceApi() {
+      if (window.faceapi) return;
+
+      setFaceStatus('Carregando biblioteca facial...');
+
+      const ok = await loadScriptWithFallback([
+        'https://cdn.jsdelivr.net/npm/face-api.js',
+        'https://unpkg.com/face-api.js/dist/face-api.min.js'
+      ]);
+
+      if (!ok || !window.faceapi) {
+        throw new Error('Biblioteca facial não disponível no navegador.');
+      }
     }
 
     async function loadModels() {
       if (modelsLoaded) return;
-      setFaceStatus('Carregando reconhecimento facial...');
-      const faceapi = await ensureFaceApi();
+      await ensureFaceApi();
+      setFaceStatus('Carregando modelos faciais...');
+
       const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+      await window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      await window.faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+      await window.faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
       modelsLoaded = true;
-      setFaceStatus('Reconhecimento facial pronto.');
     }
 
     async function startCamera() {
       if (stream) return;
-      setFaceStatus('Solicitando acesso à câmera...');
+      setFaceStatus('Ativando câmera...');
+
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
         audio: false
       });
+
       video.srcObject = stream;
+
       await new Promise(resolve => {
         video.onloadedmetadata = () => resolve();
       });
+
       setFaceStatus('Câmera ativa. Olhe para a câmera.');
     }
 
     async function capturarDescriptor() {
       await loadModels();
       await startCamera();
-      const faceapi = await ensureFaceApi();
 
-      const detection = await faceapi
-        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      const detection = await window.faceapi
+        .detectSingleFace(video, new window.faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks(true)
         .withFaceDescriptor();
 
@@ -352,9 +426,11 @@ const templates = {
         }
 
         showSuccess('Login facial reconhecido com sucesso.');
+        setFaceStatus('Biometria reconhecida. Entrando...');
         window.location.href = data.redirect || '/dashboard';
       } catch (err) {
         showError(err.message || 'Erro ao usar reconhecimento facial.');
+        setFaceStatus('Erro ao iniciar reconhecimento facial.');
         isAutoLoggingIn = false;
       }
     }
@@ -377,12 +453,14 @@ const templates = {
         iniciarLoginFacialAutomatico();
       } catch (err) {
         showError(err.message || 'Não foi possível iniciar a câmera facial.');
+        setFaceStatus('Não foi possível iniciar a câmera facial.');
       }
     });
   </script>
 </body>
 </html>
 `,
+
   'register.ejs': `
 <!DOCTYPE html>
 <html lang="pt-BR">
