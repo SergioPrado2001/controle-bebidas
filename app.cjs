@@ -219,28 +219,50 @@ const templates = {
     async function ensureFaceApi() {
       if (window.faceapi) return window.faceapi;
 
-      await new Promise(function(resolve, reject) {
-        const existing = document.querySelector('script[data-faceapi="true"]');
-        if (existing) {
-          existing.addEventListener('load', function() { resolve(); }, { once: true });
-          existing.addEventListener('error', function() { reject(new Error('Não foi possível carregar a biblioteca facial.')); }, { once: true });
-          return;
+      const sources = [
+        'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+        'https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js',
+        'https://cdn.jsdelivr.net/npm/face-api.js'
+      ];
+
+      async function waitForFaceApi(timeoutMs) {
+        const started = Date.now();
+        while (Date.now() - started < timeoutMs) {
+          if (window.faceapi) return window.faceapi;
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
-
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/face-api.js';
-        script.async = true;
-        script.dataset.faceapi = 'true';
-        script.onload = function() { resolve(); };
-        script.onerror = function() { reject(new Error('Não foi possível carregar a biblioteca facial.')); };
-        document.head.appendChild(script);
-      });
-
-      if (!window.faceapi) {
-        throw new Error('Biblioteca facial não disponível no navegador.');
+        return null;
       }
 
-      return window.faceapi;
+      const existing = document.querySelector('script[data-faceapi="true"]');
+      if (existing) {
+        const ready = await waitForFaceApi(5000);
+        if (ready) return ready;
+      }
+
+      for (const src of sources) {
+        try {
+          const old = document.querySelector('script[data-faceapi="true"]');
+          if (old) old.remove();
+
+          await new Promise(function(resolve, reject) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.dataset.faceapi = 'true';
+            script.onload = function() { resolve(); };
+            script.onerror = function() { reject(new Error('Falha ao carregar: ' + src)); };
+            document.head.appendChild(script);
+          });
+
+          const ready = await waitForFaceApi(5000);
+          if (ready) return ready;
+        } catch (err) {
+          console.warn(err);
+        }
+      }
+
+      throw new Error('Biblioteca facial não disponível no navegador. Verifique a conexão ou tente novamente.');
     }
 
     async function loadModels() {
@@ -1365,28 +1387,50 @@ const templates = {
     async function ensureFaceApiDashboard() {
       if (window.faceapi) return window.faceapi;
 
-      await new Promise((resolve, reject) => {
-        const existing = document.querySelector('script[data-faceapi="true"]');
-        if (existing) {
-          existing.addEventListener('load', () => resolve(), { once: true });
-          existing.addEventListener('error', () => reject(new Error('Não foi possível carregar a biblioteca facial.')), { once: true });
-          return;
+      const sources = [
+        'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js',
+        'https://unpkg.com/face-api.js@0.22.2/dist/face-api.min.js',
+        'https://cdn.jsdelivr.net/npm/face-api.js'
+      ];
+
+      async function waitForFaceApi(timeoutMs) {
+        const started = Date.now();
+        while (Date.now() - started < timeoutMs) {
+          if (window.faceapi) return window.faceapi;
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
-
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/face-api.js';
-        script.async = true;
-        script.dataset.faceapi = 'true';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error('Não foi possível carregar a biblioteca facial.'));
-        document.head.appendChild(script);
-      });
-
-      if (!window.faceapi) {
-        throw new Error('Biblioteca facial não disponível no navegador.');
+        return null;
       }
 
-      return window.faceapi;
+      const existing = document.querySelector('script[data-faceapi="true"]');
+      if (existing) {
+        const ready = await waitForFaceApi(5000);
+        if (ready) return ready;
+      }
+
+      for (const src of sources) {
+        try {
+          const old = document.querySelector('script[data-faceapi="true"]');
+          if (old) old.remove();
+
+          await new Promise(function(resolve, reject) {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.dataset.faceapi = 'true';
+            script.onload = function() { resolve(); };
+            script.onerror = function() { reject(new Error('Falha ao carregar: ' + src)); };
+            document.head.appendChild(script);
+          });
+
+          const ready = await waitForFaceApi(5000);
+          if (ready) return ready;
+        } catch (err) {
+          console.warn(err);
+        }
+      }
+
+      throw new Error('Biblioteca facial não disponível no navegador. Verifique a conexão ou tente novamente.');
     }
 
     async function loadFaceModels() {
