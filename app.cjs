@@ -163,7 +163,6 @@ const templates = {
       line-height:1.5;
     }
   </style>
-  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 </head>
 <body>
   <div class="box">
@@ -217,8 +216,36 @@ const templates = {
       msgFace.style.display = 'none';
     }
 
+    async function ensureFaceApi() {
+      if (window.faceapi) return window.faceapi;
+
+      await new Promise(function(resolve, reject) {
+        const existing = document.querySelector('script[data-faceapi="true"]');
+        if (existing) {
+          existing.addEventListener('load', function() { resolve(); }, { once: true });
+          existing.addEventListener('error', function() { reject(new Error('Não foi possível carregar a biblioteca facial.')); }, { once: true });
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/face-api.js';
+        script.async = true;
+        script.dataset.faceapi = 'true';
+        script.onload = function() { resolve(); };
+        script.onerror = function() { reject(new Error('Não foi possível carregar a biblioteca facial.')); };
+        document.head.appendChild(script);
+      });
+
+      if (!window.faceapi) {
+        throw new Error('Biblioteca facial não disponível no navegador.');
+      }
+
+      return window.faceapi;
+    }
+
     async function loadModels() {
       if (modelsLoaded) return;
+      const faceapi = await ensureFaceApi();
       const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
       await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
@@ -241,6 +268,8 @@ const templates = {
     async function capturarDescriptor() {
       await loadModels();
       await startCamera();
+
+      const faceapi = await ensureFaceApi();
 
       const detection = await faceapi
         .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
@@ -1333,18 +1362,36 @@ const templates = {
       }
     }
 
-    async function loadFaceModels() {
-      if (faceModelsLoaded) return;
-      if (!window.faceapi) {
+    async function ensureFaceApiDashboard() {
+      if (window.faceapi) return window.faceapi;
+
+      await new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-faceapi="true"]');
+        if (existing) {
+          existing.addEventListener('load', () => resolve(), { once: true });
+          existing.addEventListener('error', () => reject(new Error('Não foi possível carregar a biblioteca facial.')), { once: true });
+          return;
+        }
+
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/face-api.js';
-        script.defer = true;
+        script.async = true;
+        script.dataset.faceapi = 'true';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Não foi possível carregar a biblioteca facial.'));
         document.head.appendChild(script);
-        await new Promise((resolve, reject) => {
-          script.onload = resolve;
-          script.onerror = reject;
-        });
+      });
+
+      if (!window.faceapi) {
+        throw new Error('Biblioteca facial não disponível no navegador.');
       }
+
+      return window.faceapi;
+    }
+
+    async function loadFaceModels() {
+      if (faceModelsLoaded) return;
+      const faceapi = await ensureFaceApiDashboard();
 
       const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
@@ -1401,6 +1448,8 @@ const templates = {
         showFaceMessage('Preparando câmera...', false);
         await loadFaceModels();
         const video = await startFaceCamera();
+
+        const faceapi = await ensureFaceApiDashboard();
 
         const detection = await faceapi
           .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
