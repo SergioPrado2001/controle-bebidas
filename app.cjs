@@ -790,61 +790,6 @@ const templates = {
       <div class="employee-layout">
         <div>
           <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-              <div>
-                <h2 style="margin-bottom:6px;">Biometria facial</h2>
-                <p class="muted" style="margin:0;">
-                  Cadastre seu rosto para entrar no sistema com mais praticidade.
-                </p>
-              </div>
-              <div id="face-status" class="pill">Verificando...</div>
-            </div>
-
-            <div id="face-msg" class="msg" style="display:none;margin-top:14px;"></div>
-
-            <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:start;margin-top:18px;">
-              <div>
-                <div style="position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.02));padding:14px;">
-                  <video
-                    id="face-video"
-                    autoplay
-                    muted
-                    playsinline
-                    style="width:100%;display:block;border-radius:18px;background:#000;min-height:280px;object-fit:cover;">
-                  </video>
-
-                  <div style="position:absolute;inset:28px;border:2px dashed rgba(255,255,255,.35);border-radius:28px;pointer-events:none;"></div>
-                </div>
-
-                <p class="muted" style="margin:12px 0 0;line-height:1.5;">
-                  Posicione o rosto no centro, com boa iluminação e sem óculos escuros.
-                </p>
-              </div>
-
-              <div style="display:flex;flex-direction:column;gap:10px;">
-                <button type="button" class="btn-pix" onclick="cadastrarFace()">
-                  Cadastrar biometria
-                </button>
-
-                <button type="button" class="btn-soft" onclick="atualizarStatusFace()">
-                  Atualizar status
-                </button>
-
-                <button type="button" class="btn-danger" onclick="removerFace()">
-                  Remover biometria
-                </button>
-
-                <div class="info" style="margin-top:6px;">
-                  <span class="pill">Dica</span>
-                  <p class="muted" style="margin:10px 0 0;line-height:1.5;">
-                    Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="card">
             <h2>Produtos cadastrados</h2>
             <p class="muted" style="margin-top:0;">Clique nos produtos para adicionar ao carrinho.</p>
             <div class="grid">
@@ -913,6 +858,60 @@ const templates = {
         </div>
       </div>
     <% } else { %>
+          <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+              <div>
+                <h2 style="margin-bottom:6px;">Biometria facial</h2>
+                <p class="muted" style="margin:0;">
+                  Cadastre seu rosto para entrar no sistema com mais praticidade.
+                </p>
+              </div>
+              <div id="face-status" class="pill">Verificando...</div>
+            </div>
+
+            <div id="face-msg" class="msg" style="display:none;margin-top:14px;"></div>
+
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:18px;align-items:start;margin-top:18px;">
+              <div>
+                <div style="position:relative;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg, rgba(255,255,255,.04), rgba(255,255,255,.02));padding:14px;">
+                  <video
+                    id="face-video"
+                    autoplay
+                    muted
+                    playsinline
+                    style="width:100%;display:block;border-radius:18px;background:#000;min-height:280px;object-fit:cover;">
+                  </video>
+
+                  <div style="position:absolute;inset:28px;border:2px dashed rgba(255,255,255,.35);border-radius:28px;pointer-events:none;"></div>
+                </div>
+
+                <p class="muted" style="margin:12px 0 0;line-height:1.5;">
+                  Posicione o rosto no centro, com boa iluminação e sem óculos escuros.
+                </p>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <button type="button" class="btn-pix" onclick="cadastrarFace()">
+                  Cadastrar biometria
+                </button>
+
+                <button type="button" class="btn-soft" onclick="atualizarStatusFace()">
+                  Atualizar status
+                </button>
+
+                <button type="button" class="btn-danger" onclick="removerFace()">
+                  Remover biometria
+                </button>
+
+                <div class="info" style="margin-top:6px;">
+                  <span class="pill">Dica</span>
+                  <p class="muted" style="margin:10px 0 0;line-height:1.5;">
+                    Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
       <div class="card">
         <h2>Produtos cadastrados</h2>
         <div class="grid">
