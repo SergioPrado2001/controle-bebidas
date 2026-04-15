@@ -2665,17 +2665,23 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     end = dayjs().format('YYYY-MM-DD');
   }
 
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(start) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(end)) {
-    return res.status(400).send('Formato de data inválido.');
+  const startDate = dayjs(start, 'YYYY-MM-DD', true);
+  const endDate = dayjs(end, 'YYYY-MM-DD', true);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || !startDate.isValid() || !endDate.isValid()) {
+    return res.status(400).send('Formato de data inválido. Use YYYY-MM-DD.');
   }
 
-  if (dayjs(end).isBefore(dayjs(start))) {
+  if (endDate.isBefore(startDate)) {
     return res.status(400).send('A data fim não pode ser anterior à data de início.');
   }
 
-  const endPlusOne = dayjs(end).add(1, 'day').format('YYYY-MM-DD');
-  const periodoLabel = `${dayjs(start).format('DD-MM-YYYY')}_a_${dayjs(end).format('DD-MM-YYYY')}`;
-  const periodoTitulo = `${dayjs(start).format('DD/MM/YYYY')} a ${dayjs(end).format('DD/MM/YYYY')}`;
+  start = startDate.format('YYYY-MM-DD');
+  end = endDate.format('YYYY-MM-DD');
+
+  const endPlusOne = endDate.add(1, 'day').format('YYYY-MM-DD');
+  const periodoLabel = `${startDate.format('DD-MM-YYYY')}_a_${endDate.format('DD-MM-YYYY')}`;
+  const periodoTitulo = `${startDate.format('DD/MM/YYYY')} a ${endDate.format('DD/MM/YYYY')}`;
 
   try {
     const result = await pool.query(
