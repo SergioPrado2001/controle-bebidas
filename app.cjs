@@ -863,11 +863,26 @@ const templates = {
               <div>
                 <h2 style="margin-bottom:6px;">Biometria facial</h2>
                 <p class="muted" style="margin:0;">
-                  Cadastre seu rosto para entrar no sistema com mais praticidade.
+                  <% if (user.role === 'admin') { %>
+                    Selecione o usuário desejado e vincule a biometria ao cadastro dele.
+                  <% } else { %>
+                    Cadastre sua biometria para entrar no sistema com mais praticidade.
+                  <% } %>
                 </p>
               </div>
               <div id="face-status" class="pill">Verificando...</div>
             </div>
+
+            <% if (user.role === 'admin') { %>
+              <div style="margin-top:14px;max-width:420px;">
+                <label>Usuário para vincular a biometria</label><br /><br />
+                <select id="target-face-user" style="width:100%;">
+                  <% users.forEach(item => { %>
+                    <option value="<%= item.id %>"><%= item.name %> | <%= item.username %> | <%= item.role %></option>
+                  <% }) %>
+                </select>
+              </div>
+            <% } %>
 
             <div id="face-msg" class="msg" style="display:none;margin-top:14px;"></div>
 
@@ -906,7 +921,11 @@ const templates = {
                 <div class="info" style="margin-top:6px;">
                   <span class="pill">Dica</span>
                   <p class="muted" style="margin:10px 0 0;line-height:1.5;">
-                    Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
+                    <% if (user.role === 'admin') { %>
+                      O admin pode cadastrar ou remover a biometria do usuário selecionado.
+                    <% } else { %>
+                      Para melhor reconhecimento, olhe de frente e evite sombras no rosto.
+                    <% } %>
                   </p>
                 </div>
               </div>
@@ -1462,20 +1481,36 @@ const templates = {
       return video;
     }
 
+    function getSelectedFaceUserId() {
+      const select = document.getElementById('target-face-user');
+      if (!select) return null;
+      const value = parseInt(select.value, 10);
+      return Number.isFinite(value) ? value : null;
+    }
+
+    function getSelectedFaceUserLabel() {
+      const select = document.getElementById('target-face-user');
+      if (!select) return 'sua biometria';
+      const option = select.options[select.selectedIndex];
+      return option ? option.text : 'usuário selecionado';
+    }
+
     async function atualizarStatusFace() {
       const status = document.getElementById('face-status');
       if (!status) return;
 
       try {
-        const res = await fetch('/face/status');
+        const targetUserId = getSelectedFaceUserId();
+        const url = targetUserId ? '/face/status?target_user_id=' + encodeURIComponent(targetUserId) : '/face/status';
+        const res = await fetch(url);
         const data = await res.json();
 
         if (data.hasFace) {
-          status.textContent = 'Biometria cadastrada';
+          status.textContent = targetUserId ? 'Biometria cadastrada para o usuário' : 'Biometria cadastrada';
           status.style.background = 'rgba(37,193,140,.18)';
           status.style.color = '#defff2';
         } else {
-          status.textContent = 'Biometria não cadastrada';
+          status.textContent = targetUserId ? 'Usuário sem biometria cadastrada' : 'Biometria não cadastrada';
           status.style.background = 'rgba(255,193,7,.16)';
           status.style.color = '#ffe9a6';
         }
@@ -1488,6 +1523,7 @@ const templates = {
 
     async function cadastrarFace() {
       try {
+        const targetLabel = getSelectedFaceUserLabel();
         showFaceMessage('Preparando câmera...', false);
         await loadFaceModels();
         const video = await startFaceCamera();
@@ -1504,11 +1540,15 @@ const templates = {
         }
 
         const descriptor = Array.from(detection.descriptor);
+        const targetUserId = getSelectedFaceUserId();
+        const payload = { descriptor };
+
+        if (targetUserId) payload.target_user_id = targetUserId;
 
         const res = await fetch('/face/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ descriptor })
+          body: JSON.stringify(payload)
         });
 
         const data = await res.json();
@@ -1517,7 +1557,11 @@ const templates = {
           throw new Error(data.message || 'Falha ao cadastrar biometria.');
         }
 
-        showFaceMessage(data.message || 'Biometria facial cadastrada com sucesso.', false);
+        const successMsg = targetUserId
+          ? 'Biometria vinculada com sucesso para ' + targetLabel + '.'
+          : (data.message || 'Biometria facial cadastrada com sucesso.');
+
+        showFaceMessage(successMsg, false);
         atualizarStatusFace();
       } catch (err) {
         showFaceMessage(err.message || 'Erro ao cadastrar biometria.', true);
@@ -1526,12 +1570,22 @@ const templates = {
 
     async function removerFace() {
       try {
-        const ok = confirm('Deseja realmente remover sua biometria facial?');
+        const targetUserId = getSelectedFaceUserId();
+        const targetLabel = getSelectedFaceUserLabel();
+        const ok = confirm(
+          targetUserId
+            ? 'Deseja realmente remover a biometria de ' + targetLabel + '?'
+            : 'Deseja realmente remover sua biometria facial?'
+        );
         if (!ok) return;
+
+        const payload = {};
+        if (targetUserId) payload.target_user_id = targetUserId;
 
         const res = await fetch('/face/remove', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
 
         const data = await res.json();
@@ -1540,7 +1594,11 @@ const templates = {
           throw new Error(data.message || 'Falha ao remover biometria.');
         }
 
-        showFaceMessage(data.message || 'Biometria facial removida com sucesso.', false);
+        const successMsg = targetUserId
+          ? 'Biometria removida com sucesso de ' + targetLabel + '.'
+          : (data.message || 'Biometria facial removida com sucesso.');
+
+        showFaceMessage(successMsg, false);
         atualizarStatusFace();
       } catch (err) {
         showFaceMessage(err.message || 'Erro ao remover biometria.', true);
@@ -1557,11 +1615,20 @@ const templates = {
       var cpfAdmin = document.getElementById('cpf-admin');
       if (cpfAdmin) {
         cpfAdmin.addEventListener('input', function(e) {
-          let v = e.target.value.replace(/\\D/g, '').slice(0, 11);
-          if (v.length > 9) v = v.replace(/(\\d{3})(\\d{3})(\\d{3})(\\d{1,2})/, '$1.$2.$3-$4');
-          else if (v.length > 6) v = v.replace(/(\\d{3})(\\d{3})(\\d{1,3})/, '$1.$2.$3');
-          else if (v.length > 3) v = v.replace(/(\\d{3})(\\d{1,3})/, '$1.$2');
+          let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+          if (v.length > 9) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
+          else if (v.length > 6) v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+          else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
           e.target.value = v;
+        });
+      }
+
+      var targetFaceUser = document.getElementById('target-face-user');
+      if (targetFaceUser) {
+        targetFaceUser.addEventListener('change', function() {
+          const msg = document.getElementById('face-msg');
+          if (msg) msg.style.display = 'none';
+          atualizarStatusFace();
         });
       }
 
@@ -1778,6 +1845,22 @@ function euclideanDistance(a, b) {
     sum += diff * diff;
   }
   return Math.sqrt(sum);
+}
+
+function resolveFaceTarget(req, providedTargetUserId) {
+  if (req.session.user && req.session.user.role === 'admin' && providedTargetUserId) {
+    const parsed = parseInt(providedTargetUserId, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return req.session.user.id;
+}
+
+async function fetchFaceTargetUser(targetUserId) {
+  const result = await pool.query(
+    'SELECT id, name, username, role, face_descriptor FROM users WHERE id = $1',
+    [targetUserId]
+  );
+  return result.rows[0] || null;
 }
 
 app.get('/', (req, res) => {
@@ -2938,7 +3021,7 @@ app.post('/invoices/:id/delete', requireFinanceOrAdmin, async (req, res) => {
 });
 
 app.post('/face/register', requireAuth, async (req, res) => {
-  const { descriptor } = req.body;
+  const { descriptor, target_user_id } = req.body;
 
   if (!Array.isArray(descriptor) || descriptor.length !== 128) {
     return res.status(400).json({
@@ -2948,14 +3031,26 @@ app.post('/face/register', requireAuth, async (req, res) => {
   }
 
   try {
+    const targetUserId = resolveFaceTarget(req, target_user_id);
+    const targetUser = await fetchFaceTargetUser(targetUserId);
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuário de destino não encontrado.'
+      });
+    }
+
     await pool.query(
       'UPDATE users SET face_descriptor = $1 WHERE id = $2',
-      [JSON.stringify(descriptor.map(Number)), req.session.user.id]
+      [JSON.stringify(descriptor.map(Number)), targetUserId]
     );
 
     return res.json({
       success: true,
-      message: 'Biometria facial cadastrada com sucesso.'
+      message: req.session.user.role === 'admin' && Number(targetUserId) !== Number(req.session.user.id)
+        ? `Biometria facial cadastrada com sucesso para ${targetUser.name}.`
+        : 'Biometria facial cadastrada com sucesso.'
     });
   } catch (err) {
     console.error(err);
@@ -2968,15 +3063,20 @@ app.post('/face/register', requireAuth, async (req, res) => {
 
 app.get('/face/status', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT face_descriptor FROM users WHERE id = $1',
-      [req.session.user.id]
-    );
+    const targetUserId = resolveFaceTarget(req, req.query.target_user_id);
+    const targetUser = await fetchFaceTargetUser(targetUserId);
 
-    const user = result.rows[0];
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        hasFace: false,
+        message: 'Usuário de destino não encontrado.'
+      });
+    }
+
     return res.json({
       success: true,
-      hasFace: !!(user && user.face_descriptor)
+      hasFace: !!targetUser.face_descriptor
     });
   } catch (err) {
     console.error(err);
@@ -2989,14 +3089,26 @@ app.get('/face/status', requireAuth, async (req, res) => {
 
 app.post('/face/remove', requireAuth, async (req, res) => {
   try {
+    const targetUserId = resolveFaceTarget(req, req.body.target_user_id);
+    const targetUser = await fetchFaceTargetUser(targetUserId);
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Usuário de destino não encontrado.'
+      });
+    }
+
     await pool.query(
       'UPDATE users SET face_descriptor = NULL WHERE id = $1',
-      [req.session.user.id]
+      [targetUserId]
     );
 
     return res.json({
       success: true,
-      message: 'Biometria facial removida com sucesso.'
+      message: req.session.user.role === 'admin' && Number(targetUserId) !== Number(req.session.user.id)
+        ? `Biometria facial removida com sucesso de ${targetUser.name}.`
+        : 'Biometria facial removida com sucesso.'
     });
   } catch (err) {
     console.error(err);
