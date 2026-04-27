@@ -878,6 +878,43 @@ const templates = {
       font-size:16px;
       border-radius:14px;
     }
+    .payment-actions {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:16px;
+    }
+    .payment-actions button { margin-top:0; padding:14px; }
+    .pix-box {
+      display:none;
+      margin-top:16px;
+      padding:14px;
+      border-radius:16px;
+      border:1px solid rgba(37,193,140,.25);
+      background:rgba(37,193,140,.10);
+      text-align:center;
+    }
+    .pix-box img {
+      width:220px;
+      max-width:100%;
+      background:#fff;
+      border-radius:14px;
+      padding:10px;
+      margin:10px auto;
+      display:block;
+    }
+    .pix-copy {
+      width:100%;
+      min-height:86px;
+      resize:vertical;
+      margin-top:10px;
+      font-size:12px;
+      color:#051426;
+      background:#fff;
+    }
+    .btn-retirada { background:linear-gradient(135deg, #284f88, #3f6fb1); }
+    .btn-confirm-pix { background:linear-gradient(135deg, #0d9b73, #21c58b); width:100%; margin-top:12px; }
+    @media (max-width: 520px) { .payment-actions { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -954,6 +991,7 @@ const templates = {
                   <th>Data</th>
                   <th>Item</th>
                   <th>Valor</th>
+                  <th>Pagamento</th>
                 </tr>
               </thead>
               <tbody>
@@ -962,6 +1000,7 @@ const templates = {
                     <td><%= dayjs(item.created_at).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss') %></td>
                     <td><%= item.item_name %></td>
                     <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+                    <td><span class="pill"><%= item.payment_method === 'pix' ? 'Pix' : 'Retirada' %></span></td>
                   </tr>
                 <% }) %>
               </tbody>
@@ -979,9 +1018,23 @@ const templates = {
               <span>Total:</span>
               <span id="cart-total-value">R$ 0,00</span>
             </div>
-            <button type="button" id="btn-confirmar" style="display:none;" onclick="confirmarRetirada()">
-              Marcar retirada
-            </button>
+            <div id="payment-actions" class="payment-actions" style="display:none;">
+              <button type="button" class="btn-retirada" onclick="confirmarRetirada('retirada')">
+                Só marcar retirada
+              </button>
+              <button type="button" class="btn-pix" onclick="mostrarPix()">
+                Pagar no Pix
+              </button>
+            </div>
+
+            <div id="pix-box" class="pix-box">
+              <strong>Pagamento via Pix</strong>
+              <p class="muted" style="margin:8px 0 0;">Escaneie o QR Code ou copie o código Pix. Depois clique em “Já fiz o Pix”.</p>
+              <img id="pix-qrcode" alt="QR Code Pix" />
+              <textarea id="pix-copia-cola" class="pix-copy" readonly></textarea>
+              <button type="button" class="btn-soft" onclick="copiarPix()">Copiar código Pix</button>
+              <button type="button" class="btn-confirm-pix" onclick="confirmarRetirada('pix')">Já fiz o Pix</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1326,6 +1379,7 @@ const templates = {
               <th>Usuário</th>
               <th>Item</th>
               <th>Valor</th>
+              <th>Pagamento</th>
               <% if (user.role === 'admin' || user.role === 'finance') { %>
                 <th>Ação</th>
               <% } %>
@@ -1339,6 +1393,7 @@ const templates = {
                 <td><%= item.username %></td>
                 <td><%= item.item_name %></td>
                 <td>R$ <%= Number(item.item_price || 0).toFixed(2).replace('.', ',') %></td>
+                <td><span class="pill"><%= item.payment_method === 'pix' ? 'Pix' : 'Retirada' %></span></td>
                 <% if (user.role === 'admin' || user.role === 'finance') { %>
                   <td>
                     <form method="POST" action="/admin/withdrawals/<%= item.id %>/delete" onsubmit="return confirm('Deseja excluir este lançamento?');">
@@ -1412,9 +1467,10 @@ const templates = {
       var container = document.getElementById('cart-items');
       var totalDiv = document.getElementById('cart-total');
       var totalValue = document.getElementById('cart-total-value');
-      var btnConfirmar = document.getElementById('btn-confirmar');
+      var paymentActions = document.getElementById('payment-actions');
+      var pixBox = document.getElementById('pix-box');
 
-      if (!container || !totalDiv || !totalValue || !btnConfirmar) return;
+      if (!container || !totalDiv || !totalValue || !paymentActions) return;
 
       var keys = Object.keys(cart);
 
@@ -1436,7 +1492,8 @@ const templates = {
       if (keys.length === 0) {
         container.innerHTML = '<div class="cart-empty">Seu carrinho está vazio. Clique em um produto para adicionar.</div>';
         totalDiv.style.display = 'none';
-        btnConfirmar.style.display = 'none';
+        paymentActions.style.display = 'none';
+        if (pixBox) pixBox.style.display = 'none';
         return;
       }
 
@@ -1467,11 +1524,89 @@ const templates = {
       container.innerHTML = html;
       totalDiv.style.display = 'flex';
       totalValue.textContent = 'R$ ' + total.toFixed(2).replace('.', ',');
-      btnConfirmar.style.display = 'block';
-      btnConfirmar.textContent = 'Marcar retirada (' + totalItens + ' ' + (totalItens === 1 ? 'item' : 'itens') + ')';
+      paymentActions.style.display = 'grid';
+      if (pixBox) pixBox.style.display = 'none';
     }
 
-    function confirmarRetirada() {
+    function getCartTotal() {
+      return Object.keys(cart).reduce(function(total, id) {
+        return total + (cart[id].qty * cart[id].price);
+      }, 0);
+    }
+
+    function emv(id, value) {
+      var size = String(value.length).padStart(2, '0');
+      return id + size + value;
+    }
+
+    function crc16(payload) {
+      var polynomial = 0x1021;
+      var result = 0xFFFF;
+      for (var offset = 0; offset < payload.length; offset++) {
+        result ^= payload.charCodeAt(offset) << 8;
+        for (var bitwise = 0; bitwise < 8; bitwise++) {
+          if ((result <<= 1) & 0x10000) result ^= polynomial;
+          result &= 0xFFFF;
+        }
+      }
+      return result.toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function gerarPixCopiaCola(valor) {
+      var chavePix = '17819406000101';
+      var nomeRecebedor = 'GENIUS PUBLICIDADE'.substring(0, 25);
+      var cidadeRecebedor = 'CUIABA'.substring(0, 15);
+      var txid = ('GENIUS' + Date.now()).substring(0, 25);
+      var gui = emv('00', 'br.gov.bcb.pix');
+      var key = emv('01', chavePix);
+      var merchantAccount = emv('26', gui + key);
+      var additional = emv('62', emv('05', txid));
+      var payload = '';
+      payload += emv('00', '01');
+      payload += emv('01', '12');
+      payload += merchantAccount;
+      payload += emv('52', '0000');
+      payload += emv('53', '986');
+      payload += emv('54', Number(valor).toFixed(2));
+      payload += emv('58', 'BR');
+      payload += emv('59', nomeRecebedor);
+      payload += emv('60', cidadeRecebedor);
+      payload += additional;
+      payload += '6304';
+      return payload + crc16(payload);
+    }
+
+    function mostrarPix() {
+      var keys = Object.keys(cart);
+      if (keys.length === 0) {
+        alert('Adicione pelo menos um produto no carrinho.');
+        return;
+      }
+      var total = getCartTotal();
+      var codigoPix = gerarPixCopiaCola(total);
+      var pixBox = document.getElementById('pix-box');
+      var pixQr = document.getElementById('pix-qrcode');
+      var pixText = document.getElementById('pix-copia-cola');
+      pixText.value = codigoPix;
+      pixQr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' + encodeURIComponent(codigoPix);
+      pixBox.style.display = 'block';
+      pixBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function copiarPix() {
+      var pixText = document.getElementById('pix-copia-cola');
+      if (!pixText || !pixText.value) return;
+      pixText.select();
+      pixText.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(pixText.value).then(function() {
+        alert('Código Pix copiado.');
+      }).catch(function() {
+        document.execCommand('copy');
+        alert('Código Pix copiado.');
+      });
+    }
+
+    function confirmarRetirada(paymentMethod) {
       var keys = Object.keys(cart);
       if (keys.length === 0) {
         alert('Adicione pelo menos um produto no carrinho.');
@@ -1489,12 +1624,17 @@ const templates = {
         resumo += cart[id].name + ' x' + cart[id].qty + '\\n';
       });
 
-      if (!confirm('Confirmar retirada?\\n\\n' + resumo)) return;
+      var formaPagamento = paymentMethod === 'pix' ? 'pix' : 'retirada';
+      var textoConfirmacao = formaPagamento === 'pix'
+        ? 'Confirmar que o Pix já foi feito?\\n\\n'
+        : 'Confirmar retirada sem Pix?\\n\\n';
+
+      if (!confirm(textoConfirmacao + resumo)) return;
 
       fetch('/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: items })
+        body: JSON.stringify({ items: items, payment_method: formaPagamento })
       })
       .then(function(res) { return res.json(); })
       .then(function(data) {
@@ -1872,6 +2012,19 @@ async function initDB() {
   `);
 
   await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'withdrawals' AND column_name = 'payment_method'
+      ) THEN
+        ALTER TABLE withdrawals ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'retirada';
+      END IF;
+    END
+    $$;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS stock_entries (
       id SERIAL PRIMARY KEY,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2222,7 +2375,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
     if (user.role === 'employee') {
       const withdrawalsResult = await pool.query(
-        `SELECT id, item_name, item_price, created_at
+        `SELECT id, item_name, item_price, payment_method, created_at
          FROM withdrawals
          WHERE user_id = $1
          ORDER BY created_at DESC
@@ -2258,7 +2411,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     }
 
     const withdrawalsAllResult = await pool.query(`
-      SELECT w.id, w.created_at, w.item_name, w.item_price, u.name, u.username
+      SELECT w.id, w.created_at, w.item_name, w.item_price, w.payment_method, u.name, u.username
       FROM withdrawals w
       INNER JOIN users u ON u.id = w.user_id
       ORDER BY w.created_at DESC
@@ -2312,7 +2465,8 @@ app.post('/withdraw', requireAuth, async (req, res) => {
     return res.status(403).json({ success: false, message: 'Somente colaboradores podem registrar retiradas.' });
   }
 
-  const { items, item_id } = req.body;
+  const { items, item_id, payment_method } = req.body;
+  const paymentMethod = payment_method === 'pix' ? 'pix' : 'retirada';
 
   if (items && Array.isArray(items) && items.length > 0) {
     try {
@@ -2345,8 +2499,8 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
         for (let i = 0; i < qtySolicitada; i++) {
           await pool.query(
-            'INSERT INTO withdrawals (user_id, item_id, item_name, item_price) VALUES ($1, $2, $3, $4)',
-            [user.id, product.id, product.name, product.price]
+            'INSERT INTO withdrawals (user_id, item_id, item_name, item_price, payment_method) VALUES ($1, $2, $3, $4, $5)',
+            [user.id, product.id, product.name, product.price, paymentMethod]
           );
         }
 
@@ -2361,8 +2515,8 @@ app.post('/withdraw', requireAuth, async (req, res) => {
 
       await pool.query('COMMIT');
 
-      req.session.message = `Retirada registrada: ${resumo.join(', ')} (${totalItens} ${totalItens === 1 ? 'item' : 'itens'}).`;
-      return res.json({ success: true, message: `Retirada registrada com sucesso! ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}.` });
+      req.session.message = `${paymentMethod === 'pix' ? 'Pix registrado' : 'Retirada registrada'}: ${resumo.join(', ')} (${totalItens} ${totalItens === 1 ? 'item' : 'itens'}).`;
+      return res.json({ success: true, message: `${paymentMethod === 'pix' ? 'Pix registrado' : 'Retirada registrada'} com sucesso! ${totalItens} ${totalItens === 1 ? 'item' : 'itens'}.` });
     } catch (err) {
       await pool.query('ROLLBACK').catch(() => {});
       console.error(err);
@@ -2388,8 +2542,8 @@ app.post('/withdraw', requireAuth, async (req, res) => {
       await pool.query('BEGIN');
 
       await pool.query(
-        'INSERT INTO withdrawals (user_id, item_id, item_name, item_price) VALUES ($1, $2, $3, $4)',
-        [user.id, product.id, product.name, product.price]
+        'INSERT INTO withdrawals (user_id, item_id, item_name, item_price, payment_method) VALUES ($1, $2, $3, $4, $5)',
+        [user.id, product.id, product.name, product.price, paymentMethod]
       );
 
       await pool.query(
@@ -2794,7 +2948,7 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor"
+      `SELECT u.name AS "Colaborador", u.username AS "Usuario", w.item_name AS "Item", w.item_price AS "Valor", w.payment_method AS "Pagamento", w.created_at AS "Data"
        FROM withdrawals w INNER JOIN users u ON u.id = w.user_id
        WHERE w.created_at >= $1 AND w.created_at < $2
        ORDER BY u.name ASC`,
@@ -2971,6 +3125,45 @@ app.get('/reports/xlsx', requireFinanceOrAdmin, async (req, res) => {
     ws.getRow(2).height = 28;
     ws.getRow(3).height = 22;
     ws.getRow(4).height = 20;
+
+    const wsD = workbook.addWorksheet('Lançamentos Detalhados');
+    const cabDetalhes = ['DATA', 'COLABORADOR', 'USUÁRIO', 'ITEM', 'VALOR (R$)', 'PAGAMENTO'];
+    for (let c = 0; c < cabDetalhes.length; c++) {
+      const cell = wsD.getCell(1, c + 1);
+      cell.value = cabDetalhes[c];
+      cell.font = fonteNegrito;
+      cell.alignment = alinhaCentro;
+      cell.fill = azulClaro;
+      cell.border = bordaFina;
+    }
+    let linhaD = 2;
+    for (const row of rows) {
+      const fillLinha = linhaD % 2 === 0 ? branco : azulClaro;
+      const valores = [
+        dayjs(row.Data).tz('America/Cuiaba').format('DD/MM/YYYY HH:mm:ss'),
+        String(row.Colaborador || '').toUpperCase(),
+        String(row.Usuario || '').toUpperCase(),
+        String(row.Item || '').toUpperCase(),
+        Number(row.Valor || 0),
+        row.Pagamento === 'pix' ? 'PIX' : 'RETIRADA'
+      ];
+      valores.forEach((valor, idx) => {
+        const cell = wsD.getCell(linhaD, idx + 1);
+        cell.value = valor;
+        cell.font = fonteNormal;
+        cell.alignment = idx === 1 || idx === 3 ? alinhaEsquerda : alinhaCentro;
+        cell.fill = fillLinha;
+        cell.border = bordaFina;
+        if (idx === 4) cell.numFmt = '#,##0.00';
+      });
+      linhaD++;
+    }
+    wsD.getColumn(1).width = 22;
+    wsD.getColumn(2).width = 34;
+    wsD.getColumn(3).width = 20;
+    wsD.getColumn(4).width = 28;
+    wsD.getColumn(5).width = 16;
+    wsD.getColumn(6).width = 16;
 
     const wsE = workbook.addWorksheet('Estoque');
 
